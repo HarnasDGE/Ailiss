@@ -8,6 +8,7 @@
 - Dwa silniki:
   1. **Heurystyka** (domyślna, lokalna, darmowa, natychmiastowa) — implementacja testu 0–12 i banków sygnatur z raportu.
   2. **OpenRouter** (opcjonalny) — LLM lub tani model „decyzyjny”, wołany tylko dla przypadków niepewnych (albo dla wszystkich, jeśli użytkownik tak ustawi).
+- **Zgłoszenia użytkownika** (§6) — posty oznaczone ręcznie jako slop / „nie slop” tworzą lokalny zbiór przykładów: kontekst (few-shot) dla LLM, wykrywanie kopii i szablonów, sygnały autora i własne frazy.
 - Wbudowany LLM przeglądarki (Gemini Nano) — **pominięty**. Interfejs providera zostaje, więc można go dodać później.
 - **Zasada klastra** (raport §1): pojedynczy em-dash, lista czy emoji nigdy nie zwijają posta. Wymagane są sygnały z kilku kategorii naraz **i** brak konkretu.
 - Nic nie jest usuwane z DOM — tylko ukrywane atrybutem + CSS (LinkedIn to React + wirtualizowana lista).
@@ -118,6 +119,8 @@ z listy: [14 rodzin].
 ```
 Treść pytań i rodzin generowana z tych samych stałych co heurystyka (`src/shared/slop/`), więc prompt i reguły się nie rozjeżdżają.
 
+Po prompcie systemowym — blok **przykładów ze zgłoszeń użytkownika** (few-shot, §6.3), jeśli użytkownik włączył tę opcję.
+
 ### 4.4 Progi decyzji (skala raportu)
 
 | Wynik | Raport | Bez OpenRoutera | Z OpenRouterem |
@@ -148,18 +151,75 @@ Pasek ~28 px, tło jak karta LinkedIn, szary tekst, bez ikon alarmowych:
 ### 5.2 Komentarze (rodzina 4.14, opcja)
 Komentarze typu „Great post! 💯 Couldn't agree more” lub reklama pod postem → zwinięcie do jednej linii `Ukryto komentarz · Pokaż`. Reguła: krótki tekst, zero odniesienia do treści posta (brak wspólnych słów kluczowych), fraza z banku lub CTA „DM me”.
 
-### 5.3 Popup
+### 5.3 Przycisk zgłoszenia na niezwiniętym poście
+Mała ikona `⚑` w prawym górnym rogu karty, widoczna tylko na hover (opacity 0 → 0.6), w Shadow DOM. Szczegóły w §6.
+
+### 5.4 Popup
 - Włącz/wyłącz, „Ukryto dziś: 23” (+ podział na rodziny).
 - Status silnika: 🟢 heurystyka · 🟢/🔴 OpenRouter (z liczbą żądań dziś / limit).
 - Czułość: Łagodny · Normalny · Agresywny.
 
-### 5.4 Ustawienia
-- OpenRouter: klucz, test połączenia, model, tryb LLM/decyzyjny, zakres (tylko niepewne / wszystkie), limit dzienny.
+### 5.5 Ustawienia
+- OpenRouter: klucz, test połączenia, model, tryb LLM/decyzyjny, zakres (tylko niepewne / wszystkie), limit dzienny, „używaj zgłoszeń jako kontekstu”.
+- **Zgłoszenia**: lista (etykieta, rodzina, fragment, data), edycja, usuwanie, filtr, eksport/import JSON; lista własnych fraz.
 - Zachowanie: tryb ukrywania, komentarze tak/nie, pomijanie postów sponsorowanych / repostów / 1. stopnia sieci.
 - Rodziny: możliwość wyłączenia wybranych (np. ktoś nie chce chować `announcement`).
 - Wyjątki autorów, czyszczenie cache, eksport/import ustawień (bez klucza).
 
-## 6. Struktura projektu
+## 6. Zgłaszanie postów (dane użytkownika jako kontekst)
+
+### 6.1 Skąd biorą się zgłoszenia
+| Akcja | Etykieta |
+|---|---|
+| `⚑` na niezwiniętym poście (hover) → „Zgłoś jako slop” | `slop` |
+| Prawy klik na poście → menu kontekstowe „Ailiss: zgłoś jako slop” | `slop` |
+| „To nie slop” na zwiniętym poście | `human` |
+| Rozwinięcie posta 4–6 i potwierdzenie „Tak, slop” w belce | `slop` |
+| Zaznaczenie fragmentu → menu kontekstowe „Ailiss: dodaj frazę jako sygnał” | własna fraza (§6.4) |
+
+Po kliknięciu `⚑` — mini-formularz w popoverze (wszystko opcjonalne, domyślnie wystarczy jeden klik):
+```
+┌ Zgłoś jako slop ───────────────────────────┐
+│ Rodzina:  [broetry ▾]   (podpowiedź z heurystyki) │
+│ Notatka:  [ hook o dziecku, zero konkretu ] │
+│ [ ] Ukrywaj więcej od tego autora           │
+│                      Anuluj   Zgłoś i zwiń  │
+└────────────────────────────────────────────┘
+```
+Po zgłoszeniu post od razu się zwija (`Ukryto · zgłoszone przez Ciebie`), z możliwością cofnięcia.
+
+### 6.2 Model danych (IndexedDB, wyłącznie lokalnie)
+```ts
+interface UserReport {
+  id: string;
+  postUrn: string;
+  textHash: string;            // do deduplikacji
+  text: string;                // obcięty do 2000 znaków, bez imienia autora
+  label: 'slop' | 'human';
+  family?: SlopFamily;
+  note?: string;
+  authorId?: string;           // tylko gdy zaznaczono „ukrywaj autora”
+  heuristic: { score: number; signals: string[] };  // stan w chwili zgłoszenia
+  shingles: number[];          // MinHash 3-gramów słów, do podobieństwa
+  createdAt: number;
+}
+
+interface UserPhrase { id: string; phrase: string; lang: 'en' | 'pl' | 'any'; weight: number; family?: SlopFamily }
+```
+Limit 500 zgłoszeń (najstarsze `slop` wypadają pierwsze; `human` trzymane dłużej, bo są rzadsze i cenniejsze).
+
+### 6.3 Jak zgłoszenia są używane
+1. **Few-shot dla LLM** — przy każdym batchu wybierane jest do 4 przykładów: 2–3 `slop` + 1–2 `human`, najpierw z tej samej rodziny co wynik heurystyki, potem najbardziej podobne (Jaccard na MinHash). Każdy przykład obcięty do ~600 znaków, z etykietą i notatką użytkownika. Opcja wyłączalna; przykłady wysyłane bez danych autora.
+2. **Wykrywanie kopii i szablonów** (działa też bez OpenRoutera) — podobieństwo ≥ 0,6 do zgłoszonego `slop` → +3 do wyniku i rodzina ze zgłoszenia. Łapie ten sam szablon publikowany przez wiele kont. Podobieństwo do zgłoszonego `human` → −3.
+3. **Sygnał autora** — „ukrywaj więcej od tego autora” → +2 do wyniku jego postów (nie zwija automatycznie wszystkiego; od tego jest „Zawsze ukrywaj autora”).
+4. **Własne frazy** — trafiają do reguł heurystyki jako `SignalRule` z wagą 1 (edytowalną).
+5. **Kalibracja wag** — lokalna statystyka: które reguły trafiają w zgłoszenia `slop`, a które w `human`. Po ≥ 20 zgłoszeniach wagi reguł korygowane automatycznie w granicach ±50% wartości domyślnej; reset jednym przyciskiem.
+
+### 6.4 Eksport / import
+- JSON zgodny z formatem fiksturek (`tests/fixtures/slop|human/`) — zgłoszenia można przenieść do testów i stroić domyślne reguły na prawdziwych postach.
+- Import cudzego zestawu (np. od znajomego) z deduplikacją po `textHash`.
+
+## 7. Struktura projektu
 
 Stack: TypeScript + Manifest V3 + [WXT](https://wxt.dev). Testy: Vitest.
 
@@ -177,11 +237,17 @@ ailiss/
 │  ├─ background/
 │  │  ├─ router.ts
 │  │  ├─ cache.ts                    # IndexedDB, TTL
+│  │  ├─ context-menu.ts             # „zgłoś jako slop”, „dodaj frazę”
+│  │  ├─ reports/
+│  │  │  ├─ reports-store.ts         # IndexedDB: UserReport, UserPhrase
+│  │  │  ├─ select-examples.ts       # dobór few-shot do batcha
+│  │  │  ├─ calibrate-weights.ts     # korekta wag reguł ±50%
+│  │  │  └─ export-import.ts
 │  │  ├─ queue.ts                    # batching, limity
 │  │  ├─ circuit-breaker.ts
 │  │  └─ openrouter/
 │  │     ├─ client.ts
-│  │     ├─ prompt.ts                # budowany ze stałych z shared/slop
+│  │     ├─ prompt.ts                # stałe z shared/slop + przykłady ze zgłoszeń
 │  │     └─ response-schema.ts
 │  ├─ content/
 │  │  ├─ linkedin/
@@ -193,6 +259,7 @@ ailiss/
 │  │  └─ ui/
 │  │     ├─ collapse-bar.ts          # Shadow DOM
 │  │     ├─ peek-popover.ts
+│  │     ├─ report-button.ts         # ⚑ na hover + mini-formularz
 │  │     └─ collapse.css
 │  └─ shared/
 │     ├─ messages.ts
@@ -203,19 +270,23 @@ ailiss/
 │        ├─ test-items.ts            # 12 pytań testu (UI i prompt)
 │        ├─ parse-post.ts            # ParsedPost: akapity, zdania, encje
 │        ├─ score.ts                 # silnik heurystyki
+│        ├─ similarity.ts            # MinHash 3-gramów, Jaccard
 │        └─ rules/
 │           ├─ openers.ts            # §5.1 + PL
 │           ├─ closers.ts            # §5.2 + PL
 │           ├─ vocabulary.ts         # §5.3, §5.5
 │           ├─ constructions.ts      # §5.4 (antyteza, rule of three…)
 │           ├─ structure.ts          # §6 (broetry, rytm, emoji, hashtagi)
-│           └─ substance.ts          # antysygnały (konkret)
+│           ├─ substance.ts          # antysygnały (konkret)
+│           └─ user.ts               # własne frazy, kopie, autor (ze zgłoszeń)
 ├─ tests/
 │  ├─ fixtures/
 │  │  ├─ slop/                       # wszystkie przykłady z raportu §4
 │  │  ├─ human/                      # wersje „po” z §8 + dobry komentarz §9
 │  │  └─ dom/                        # snapshoty HTML feedu LinkedIn
 │  ├─ score.test.ts
+│  ├─ similarity.test.ts
+│  ├─ select-examples.test.ts
 │  └─ extract-post.test.ts
 ├─ wxt.config.ts
 └─ package.json
@@ -226,12 +297,12 @@ ailiss/
 - 100% wersji „po” z §8 ma wynik < 4 (żadnego fałszywego zwinięcia).
 - Każdy przykład z §4 dostaje poprawną rodzinę.
 
-## 7. Manifest (szkic)
-- `permissions`: `storage`
+## 8. Manifest (szkic)
+- `permissions`: `storage`, `contextMenus`
 - `host_permissions`: `https://www.linkedin.com/*`, `https://openrouter.ai/*` (to drugie jako `optional_host_permissions`, prośba dopiero po włączeniu OpenRoutera)
 - brak `<all_urls>`, brak zdalnego kodu.
 
-## 8. Ryzyka
+## 9. Ryzyka
 
 | Ryzyko | Mitygacja |
 |---|---|
@@ -239,10 +310,12 @@ ailiss/
 | Slop bez fraz z banku (model omija słowa kluczowe) | reguły strukturalne (rytm, akapity, brak encji) + LLM dla strefy 4–6 |
 | LinkedIn zmienia DOM | selektory w jednym pliku, `data-urn`, testy na snapshotach |
 | Koszt OpenRouter | tylko strefa niepewna, cache, batching, limit, tryb decyzyjny |
+| Zgłoszenia zawężają filtr do gustu jednej osoby / błędne zgłoszenia | granice korekty wag ±50%, reset, edycja i cofanie zgłoszeń, przykłady `human` w few-shot |
 | Wykrywanie nazw własnych w PL/EN bez NLP | proste reguły (wielka litera w środku zdania, liczby, daty) — wystarczą jako antysygnał, nie muszą być dokładne |
 
-## 9. Etapy
+## 10. Etapy
 1. **MVP**: `shared/slop` (parser + reguły + score) z testami na fiksturach z raportu → content script + zwijanie + popup.
-2. Popover z powodami, „To nie slop”, wyjątki autorów, wyłączanie rodzin.
-3. OpenRouter (LLM + decyzyjny), cache, batching, limity, circuit breaker.
-4. Komentarze (rodzina 4.14).
+2. Popover z powodami, „To nie slop”, wyjątki autorów, wyłączanie rodzin, **zgłaszanie postów** (⚑, menu kontekstowe, magazyn, wykrywanie kopii, własne frazy, eksport/import).
+3. OpenRouter (LLM + decyzyjny), cache, batching, limity, circuit breaker, few-shot ze zgłoszeń.
+4. Kalibracja wag ze zgłoszeń.
+5. Komentarze (rodzina 4.14).
