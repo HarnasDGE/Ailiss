@@ -1,0 +1,30 @@
+[
+  {
+    "id": "x-human-1",
+    "label": "human",
+    "kind": "post",
+    "source": "syntetyczny: zmiana pracy z konkretem",
+    "text": "Od 1 grudnia dołączam do Allegro jako Staff Engineer w zespole płatności.\n\nPrzez ostatnie 4 lata w Booksy budowałem system rozliczeń dla ~30 tys. salonów. Najtrudniejsza lekcja: migracja z jednego PSP na dwóch zajęła nam 9 miesięcy zamiast 3, bo nikt nie spisał, które webhooki są idempotentne.\n\nW Allegro zaczynam od audytu retry'ów w procesie zwrotów. Jeśli ktoś robił podobną migrację na Adyenie — chętnie pogadam, bo mam kilka otwartych pytań o reconciliation."
+  },
+  {
+    "id": "x-human-2",
+    "label": "human",
+    "kind": "post",
+    "source": "syntetyczny: krótkie linie, ale konkret",
+    "text": "Wczoraj padł nam produkcyjny Postgres.\n\n14:05 — alert o replication lag.\n14:12 — primary przestaje przyjmować zapisy, dysk 100%.\n14:40 — przełączenie na replikę, 35 minut niedostępności checkoutu.\n\nPrzyczyna: tabela audit_log rosła o 8 GB dziennie, a job czyszczący był wyłączony od migracji w marcu.\n\nCo zmieniamy: alert na 70% dysku zamiast 90%, partycjonowanie audit_log po miesiącach, job czyszczący w monitoringu. Postmortem w środę, wrzucę link."
+  },
+  {
+    "id": "x-human-3",
+    "label": "human",
+    "kind": "post",
+    "source": "syntetyczny: opinia z argumentami",
+    "text": "Przez ostatni kwartał prowadziłem rekrutację na stanowisko frontend developera i mam jedną obserwację, z którą nie wszyscy się zgodzą. Zadania domowe na 8 godzin odstraszają najlepszych kandydatów: z 40 osób, które dostały zadanie, oddało je 11, a z tych, którym złożyliśmy ofertę, dwie przyznały, że i tak by go nie zrobiły, gdyby miały inną ofertę w toku.\n\nW lutym zamieniliśmy zadanie na 90-minutowe pair programming na prawdziwym tickecie z naszego backlogu. Liczba oddanych etapów wzrosła, ale nie wiem jeszcze, czy jakość zatrudnień jest lepsza — za mało danych. Wrócę z tym w czerwcu."
+  },
+  {
+    "id": "x-human-4",
+    "label": "human",
+    "kind": "post",
+    "source": "syntetyczny: ogłoszenie wydarzenia",
+    "text": "W czwartek 12 grudnia o 18:00 robimy w Krakowie kolejny meetup Kraków.js. Tym razem dwa talki: Ania Nowak o migracji z Webpacka na Vite w monorepo z 40 pakietami (czas buildu z 11 do 2 minut) i Tomek Wiśniewski o tym, czemu wycofali React Server Components z produkcji po pół roku. Miejsc jest 80, zapisy przez Meetup, pizza od sponsora."
+  }
+]

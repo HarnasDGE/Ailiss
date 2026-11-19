@@ -1,0 +1,23 @@
+{
+  "name": "ailiss",
+  "description": "Rozszerzenie Chrome zwijające posty AI slop na LinkedIn",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "icons": "node scripts/generate-icons.mjs",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.7",
+    "happy-dom": "^21.0.4",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7",
+    "wxt": "^0.21.5"
+  }
+}
