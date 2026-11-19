@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pl" class="theme--light">
+<head><meta charset="utf-8"><title>LinkedIn feed (makieta testowa)</title>
+<style>
+body { font-family: system-ui, sans-serif; background: #f4f2ee; margin: 0; }
+main { max-width: 555px; margin: 0 auto; padding: 24px 0; }
+.feed-shared-update-v2 { background: #fff; border-radius: 8px; margin-bottom: 8px; padding: 12px 16px; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+.update-components-actor__meta-link { display: grid; text-decoration: none; color: inherit; }
+.update-components-actor__title { font-weight: 600; }
+.update-components-actor__description, .update-components-actor__sub-description { font-size: 12px; color: #666; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.update-components-text { margin: 8px 0; font-size: 14px; line-height: 1.45; }
+.feed-shared-inline-show-more-text__see-more-less-toggle { border: 0; background: none; color: #666; }
+.social-details-social-counts { font-size: 12px; color: #666; }
+.feed-shared-social-action-bar { display: flex; gap: 8px; border-top: 1px solid #eee; margin-top: 8px; padding-top: 4px; }
+.comments-comment-entity { background: #f2f2f2; border-radius: 8px; padding: 8px; margin-top: 8px; font-size: 13px; }
+.update-components-mini-update-v2 { border: 1px solid #ddd; border-radius: 8px; padding: 8px; }
+</style></head>
+<body><main class="scaffold-finite-scroll__content">
+<div class="feed-shared-update-v2" data-urn="urn:li:activity:1001" role="article">
+    <div class="update-components-actor">
+      <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/jan-kowalski?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA">
+        <span class="update-components-actor__title"><span aria-hidden="true">Jan Kowalski</span><span class="visually-hidden">Jan Kowalski, Premium</span></span>
+        <span class="update-components-actor__description"><span aria-hidden="true">Head of Something</span></span>
+        <span class="update-components-actor__sub-description"><span aria-hidden="true">2 dni • </span></span>
+      </a>
+    </div>
+    <div class="feed-shared-update-v2__description">
+      <div class="feed-shared-inline-show-more-text">
+        <div class="update-components-text"><span class="break-words"><span dir="ltr">My 4-year-old asked me a question last night.<br><br>&quot;Dad, why do you always look at your phone?&quot;<br><br>I didn&#x27;t have an answer.<br><br>I put the phone down.<br><br>We built a tower out of blocks.<br><br>It fell down. We laughed.<br><br>That&#x27;s when I realized something about leadership.<br><br>The best teams aren&#x27;t built on strategy.<br><br>They&#x27;re built on presence.<br><br>Your calendar can wait.<br><br>Your people can&#x27;t.</span></span></div>
+        <button class="feed-shared-inline-show-more-text__see-more-less-toggle" type="button"><span>…więcej</span></button>
+      </div>
+    </div>
+    <div class="social-details-social-counts">12 reakcji · 3 komentarze</div>
+    <div class="feed-shared-social-action-bar"><button type="button">Lubię to</button><button type="button">Komentarz</button></div>
+    
+  </div>
+<div class="feed-shared-update-v2" data-urn="urn:li:activity:1002" role="article">
+    <div class="update-components-actor">
+      <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/anna-nowak?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA">
+        <span class="update-components-actor__title"><span aria-hidden="true">Anna Nowak</span><span class="visually-hidden">Anna Nowak, Premium</span></span>
+        <span class="update-components-actor__description"><span aria-hidden="true">Head of Something</span></span>
+        <span class="update-components-actor__sub-description"><span aria-hidden="true">2 dni • </span></span>
+      </a>
+    </div>
+    <div class="feed-shared-update-v2__description">
+      <div class="feed-shared-inline-show-more-text">
+        <div class="update-components-text"><span class="break-words"><span dir="ltr">Wczoraj padł nam produkcyjny Postgres.<br><br>14:05 — alert o replication lag.<br>14:12 — primary przestaje przyjmować zapisy, dysk 100%.<br>14:40 — przełączenie na replikę, 35 minut niedostępności checkoutu.<br><br>Przyczyna: tabela audit_log rosła o 8 GB dziennie, a job czyszczący był wyłączony od migracji w marcu.<br><br>Co zmieniamy: alert na 70% dysku zamiast 90%, partycjonowanie audit_log po miesiącach, job czyszczący w monitoringu. Postmortem w środę, wrzucę link.</span></span></div>
+        <button class="feed-shared-inline-show-more-text__see-more-less-toggle" type="button"><span>…więcej</span></button>
+      </div>
+    </div>
+    <div class="social-details-social-counts">12 reakcji · 3 komentarze</div>
+    <div class="feed-shared-social-action-bar"><button type="button">Lubię to</button><button type="button">Komentarz</button></div>
+    
+  </div>
+<div class="feed-shared-update-v2" data-urn="urn:li:activity:1003" role="article">
+    <div class="update-components-actor">
+      <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/piotr-w?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA">
+        <span class="update-components-actor__title"><span aria-hidden="true">Piotr Wiśniewski</span><span class="visually-hidden">Piotr Wiśniewski, Premium</span></span>
+        <span class="update-components-actor__description"><span aria-hidden="true">Head of Something</span></span>
+        <span class="update-components-actor__sub-description"><span aria-hidden="true">2 dni • </span></span>
+      </a>
+    </div>
+    <div class="feed-shared-update-v2__description">
+      <div class="feed-shared-inline-show-more-text">
+        <div class="update-components-text"><span class="break-words"><span dir="ltr">The 4-step framework that changed my life:<br><br>✅ Step 1: Audit your time<br>✅ Step 2: Cut the noise<br>✅ Step 3: Double down on what works<br>✅ Step 4: Repeat<br><br>Simple. Not easy.<br><br>Save this for later. 📌<br><br><a href="https://www.linkedin.com/feed/hashtag/leadership"><span class="visually-hidden">hashtag</span>#leadership</a> <a href="https://www.linkedin.com/feed/hashtag/growth"><span class="visually-hidden">hashtag</span>#growth</a> <a href="https://www.linkedin.com/feed/hashtag/mindset"><span class="visually-hidden">hashtag</span>#mindset</a> <a href="https://www.linkedin.com/feed/hashtag/productivity"><span class="visually-hidden">hashtag</span>#productivity</a> <a href="https://www.linkedin.com/feed/hashtag/success"><span class="visually-hidden">hashtag</span>#success</a> <a href="https://www.linkedin.com/feed/hashtag/entrepreneur"><span class="visually-hidden">hashtag</span>#entrepreneur</a></span></span></div>
+        <button class="feed-shared-inline-show-more-text__see-more-less-toggle" type="button"><span>…więcej</span></button>
+      </div>
+    </div>
+    <div class="social-details-social-counts">12 reakcji · 3 komentarze</div>
+    <div class="feed-shared-social-action-bar"><button type="button">Lubię to</button><button type="button">Komentarz</button></div>
+    
+  </div>
+<div class="feed-shared-update-v2" data-urn="urn:li:activity:1004" role="article">
+    <div class="update-components-actor">
+      <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/maria-z?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA">
+        <span class="update-components-actor__title"><span aria-hidden="true">Maria Zielińska</span><span class="visually-hidden">Maria Zielińska, Premium</span></span>
+        <span class="update-components-actor__description"><span aria-hidden="true">Head of Something</span></span>
+        <span class="update-components-actor__sub-description"><span aria-hidden="true">2 dni • </span></span>
+      </a>
+    </div>
+    <div class="feed-shared-update-v2__description">
+      <div class="feed-shared-inline-show-more-text">
+        <div class="update-components-text"><span class="break-words"><span dir="ltr">Testowałem Copilota przez trzy miesiące na jednym repo (TypeScript, ~40k linii). Efekt: +18% na boilerplate, 0% na decyzjach architektonicznych, dwie zaakceptowane sugestie, które przeszły testy i robiły złą rzecz. Wniosek, jaki mam: narzędzie przyspiesza to, co już umiesz ocenić. Na resztę trzeba uważać.</span></span></div>
+        <button class="feed-shared-inline-show-more-text__see-more-less-toggle" type="button"><span>…więcej</span></button>
+      </div>
+    </div>
+    <div class="social-details-social-counts">12 reakcji · 3 komentarze</div>
+    <div class="feed-shared-social-action-bar"><button type="button">Lubię to</button><button type="button">Komentarz</button></div>
+    <div class="comments-comments-list"><article class="comments-comment-entity">
+      <span class="comments-comment-meta__description-title">Tomasz Lis</span>
+      <div class="comments-comment-item__main-content"><div class="update-components-text"><span dir="ltr">Great post! 💯 Couldn&#x27;t agree more. This really resonates. Thanks for sharing! 🙌</span></div></div>
+    </article><article class="comments-comment-entity">
+      <span class="comments-comment-meta__description-title">Ewa Kot</span>
+      <div class="comments-comment-item__main-content"><div class="update-components-text"><span dir="ltr">„+18% na boilerplate, 0% na architekturze&quot; — u mnie było odwrotnie, ale tylko dlatego, że repo miało 8 lat testów. Ciekawe, czy efekt zależy od pokrycia testami. Robiłeś to na repo bez testów?</span></div></div>
+    </article></div>
+  </div>
+<div class="feed-shared-update-v2" data-urn="urn:li:activity:1005" role="article">
+    <div class="update-components-actor">
+      <a class="update-components-actor__meta-link" href="https://www.linkedin.com/company/acme?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA">
+        <span class="update-components-actor__title"><span aria-hidden="true">Acme Corp</span><span class="visually-hidden">Acme Corp, Premium</span></span>
+        <span class="update-components-actor__description"><span aria-hidden="true">Head of Something</span></span>
+        <span class="update-components-actor__sub-description"><span aria-hidden="true">Promowane</span></span>
+      </a>
+    </div>
+    <div class="feed-shared-update-v2__description">
+      <div class="feed-shared-inline-show-more-text">
+        <div class="update-components-text"><span class="break-words"><span dir="ltr">At [Company], we believe that our people are our greatest asset.<br><br>We don&#x27;t just hire employees.<br><br>We build careers.<br><br>We foster a culture of curiosity, ownership, and belonging.<br><br>Because when our people grow, our business grows.<br><br>That&#x27;s the [Company] difference. 💙</span></span></div>
+        <button class="feed-shared-inline-show-more-text__see-more-less-toggle" type="button"><span>…więcej</span></button>
+      </div>
+    </div>
+    <div class="social-details-social-counts">12 reakcji · 3 komentarze</div>
+    <div class="feed-shared-social-action-bar"><button type="button">Lubię to</button><button type="button">Komentarz</button></div>
+    
+  </div>
+<div class="feed-shared-update-v2" data-urn="urn:li:activity:1006" role="article">
+    <div class="update-components-actor">
+      <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/karol-mazur?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA">
+        <span class="update-components-actor__title"><span aria-hidden="true">Karol Mazur</span><span class="visually-hidden">Karol Mazur, Premium</span></span>
+        <span class="update-components-actor__description"><span aria-hidden="true">Head of Something</span></span>
+        <span class="update-components-actor__sub-description"><span aria-hidden="true">2 dni • </span></span>
+      </a>
+    </div>
+    <div class="feed-shared-update-v2__description">
+      <div class="feed-shared-inline-show-more-text">
+        <div class="update-components-text"><span class="break-words"><span dir="ltr">Unpopular opinion:<br><br>Meetings are a waste of time.<br><br>I said what I said.</span></span></div>
+        <button class="feed-shared-inline-show-more-text__see-more-less-toggle" type="button"><span>…więcej</span></button>
+      </div>
+    </div>
+    <div class="social-details-social-counts">12 reakcji · 3 komentarze</div>
+    <div class="feed-shared-social-action-bar"><button type="button">Lubię to</button><button type="button">Komentarz</button></div>
+    
+  </div>
+<div class="feed-shared-update-v2" data-urn="urn:li:activity:1007" role="article">
+    <div class="update-components-header"><span>Kamil Bąk udostępnił to</span></div>
+    <div class="update-components-actor">
+      <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/kamil-bak?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA">
+        <span class="update-components-actor__title"><span aria-hidden="true">Kamil Bąk</span><span class="visually-hidden">Kamil Bąk, Premium</span></span>
+        <span class="update-components-actor__description"><span aria-hidden="true">Head of Something</span></span>
+        <span class="update-components-actor__sub-description"><span aria-hidden="true">2 dni • </span></span>
+      </a>
+    </div>
+    <div class="update-components-mini-update-v2"><div class="update-components-actor">
+      <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/ola-lis?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA">
+        <span class="update-components-actor__title"><span aria-hidden="true">Ola Lis</span><span class="visually-hidden">Ola Lis, Premium</span></span>
+        <span class="update-components-actor__description"><span aria-hidden="true">Head of Something</span></span>
+        <span class="update-components-actor__sub-description"><span aria-hidden="true">2 dni • </span></span>
+      </a>
+    </div><div class="feed-shared-update-v2__description">
+      <div class="feed-shared-inline-show-more-text">
+        <div class="update-components-text"><span class="break-words"><span dir="ltr">You don&#x27;t have a hiring problem.<br><br>You have a retention problem.<br><br>You don&#x27;t have a marketing problem.<br><br>You have a positioning problem.<br><br>You don&#x27;t have a productivity problem.<br><br>You have a priority problem.</span></span></div>
+        <button class="feed-shared-inline-show-more-text__see-more-less-toggle" type="button"><span>…więcej</span></button>
+      </div>
+    </div></div>
+  </div>
+<div class="feed-shared-update-v2" data-urn="urn:li:activity:1008" role="article">
+    <div class="update-components-actor">
+      <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/zofia-duda?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA">
+        <span class="update-components-actor__title"><span aria-hidden="true">Zofia Duda</span><span class="visually-hidden">Zofia Duda, Premium</span></span>
+        <span class="update-components-actor__description"><span aria-hidden="true">Head of Something</span></span>
+        <span class="update-components-actor__sub-description"><span aria-hidden="true">2 dni • </span></span>
+      </a>
+    </div>
+    <div class="feed-shared-update-v2__description">
+      <div class="feed-shared-inline-show-more-text">
+        <div class="update-components-text"><span class="break-words"><span dir="ltr">Przez ostatni kwartał prowadziłem rekrutację na stanowisko frontend developera i mam jedną obserwację, z którą nie wszyscy się zgodzą. Zadania domowe na 8 godzin odstraszają najlepszych kandydatów: z 40 osób, które dostały zadanie, oddało je 11, a z tych, którym złożyliśmy ofertę, dwie przyznały, że i tak by go nie zrobiły, gdyby miały inną ofertę w toku.<br><br>W lutym zamieniliśmy zadanie na 90-minutowe pair programming na prawdziwym tickecie z naszego backlogu. Liczba oddanych etapów wzrosła, ale nie wiem jeszcze, czy jakość zatrudnień jest lepsza — za mało danych. Wrócę z tym w czerwcu.</span></span></div>
+        <button class="feed-shared-inline-show-more-text__see-more-less-toggle" type="button"><span>…więcej</span></button>
+      </div>
+    </div>
+    <div class="social-details-social-counts">12 reakcji · 3 komentarze</div>
+    <div class="feed-shared-social-action-bar"><button type="button">Lubię to</button><button type="button">Komentarz</button></div>
+    
+  </div>
+</main></body></html>

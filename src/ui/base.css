@@ -1,0 +1,67 @@
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f4f2ee;
+  --border: #e0dfdc;
+  --text: #1d2226;
+  --muted: #666666;
+  --accent: #0a66c2;
+  --accent-text: #ffffff;
+  --ok: #057642;
+  --warn: #b24020;
+  --radius: 8px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1f23;
+    --bg-soft: #262b30;
+    --border: #3a4046;
+    --text: #e9e9e9;
+    --muted: #a6a6a6;
+    --accent: #71b7fb;
+    --accent-text: #0b1a28;
+    --ok: #5ec48a;
+    --warn: #f08a6c;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+h1, h2, h3 { margin: 0; line-height: 1.25; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+button.danger { color: var(--warn); }
+button:disabled { opacity: 0.5; cursor: default; }
+input[type="text"], input[type="password"], input[type="number"], select, textarea {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+input:focus-visible, select:focus-visible, button:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--ok); }
+.dot.warn { background: var(--warn); }
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.segmented button { border: 0; border-radius: 0; background: transparent; }
+.segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.chip { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--bg-soft); color: var(--muted); }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }

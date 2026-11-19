@@ -13,7 +13,7 @@ export interface TestItem {
 
 export const TEST_ITEMS: readonly TestItem[] = [
   { id: 1, short: 'hook', heuristic: true, llm: true, question: 'Czy hook (pierwsze zdanie) to jedno zdanie bez kontekstu i bez nazwy?' },
-  { id: 2, short: 'broetry', heuristic: true, llm: true, question: 'Czy większość akapitów to jedno zdanie?' },
+  { id: 2, short: 'jednozdaniowe akapity', heuristic: true, llm: true, question: 'Czy większość akapitów to jedno zdanie?' },
   { id: 3, short: 'wata', heuristic: false, llm: true, question: 'Czy da się usunąć 30% tekstu bez utraty sensu?' },
   { id: 4, short: 'antyteza', heuristic: true, llm: true, question: 'Czy jest konstrukcja „It’s not X, it’s Y” lub jej wariant?' },
   { id: 5, short: 'lista', heuristic: true, llm: true, question: 'Czy jest lista 3 lub 5 punktów z bold-headerami lub emoji?' },

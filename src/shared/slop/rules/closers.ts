@@ -12,7 +12,7 @@ const TAIL_CLOSERS = [
   /\bjakie są wasze doświadczenia\s*\?/,
   /👇\s*$/m,
   /\bare you ready\s*\?/,
-  /\bjoin us!?\s*(?:\p{Extended_Pictographic}|$)/m,
+  /\bjoin us!?\s*(?:\p{Extended_Pictographic}|$)/mu,
   /\bdołącz(?:cie)? do nas\b/,
   /\bjesteś gotowy\s*\?|\bjesteście gotowi\s*\?/,
 ].map((p) => re(p, 'imu'));
@@ -20,7 +20,7 @@ const TAIL_CLOSERS = [
 /** Closéry, które są baitem niezależnie od miejsca w poście. */
 const ANYWHERE_CLOSERS = [
   /\bcomment\s+["“”]?[a-z]{2,}["“”]?\s+(?:below|in the comments)\b/,
-  /\bdrop an? (?:["“][^"”]+["”]|\p{Extended_Pictographic}|\w+) (?:below|in the comments)?/,
+  /\bdrop an? (?:["“][^"”]+["”]|\p{Extended_Pictographic}|\w+) (?:below|in the comments)?/u,
   /\brepost (?:if|to help)\b/,
   /♻️/,
   /\btag (?:someone|a friend|a colleague)\b/,

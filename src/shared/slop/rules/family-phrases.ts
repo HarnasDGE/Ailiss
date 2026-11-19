@@ -85,7 +85,7 @@ export const FAMILY_PHRASE_RULES: SignalRule[] = [
     /\bnobody (?:talks|is talking) about\b/,
     /\bi['’]?ll say what everyone is thinking\b/,
     /\bthis might get me cancell?ed\b/,
-    /\bi see you\.?\s*(?:\p{Extended_Pictographic}|$)/m,
+    /\bi see you\.?\s*(?:\p{Extended_Pictographic}|$)/mu,
     /^(?:niepopularna opinia|kontrowersyjna opinia|powiem wprost|powiem to głośno)\s*[:.]/m,
     /\bnikt (?:o tym )?nie mówi o\b|\bnikt o tym nie mówi\b/,
   ], { familyWeight: 3 }),

@@ -14,7 +14,7 @@ const SOURCE_NAMES = re(
   /\b(?:gallup|mckinsey|gartner|forrester|deloitte|pwc|pew research|eurostat|gus|nbp|oecd|github|stack overflow)\b|https?:\/\//,
   'iu',
 );
-const SOURCE_ATTRIBUTION = re(/\bwg [\p{Lu}]|\baccording to [\p{Lu}]|\(\s*(?:19|20)\d\d\s*\)/, 'u');
+const SOURCE_ATTRIBUTION = re(/\bwg [\p{Lu}]|\baccording to [\p{Lu}]|\(\s*(?:19|20)\d\d\s*\)/u, 'u');
 
 const MEASURED_NUMBER = re(
   /\d[\d,.\s]*(?:%|pp|k\b|zł|pln|€|eur|usd|ms|gb|mb|linii|lines|osób|osoby|os\.|etap\w*|dni|tygodni\w*|miesięc\w*|kwarta\w*|godzin\w*|h\b|min\b)/,

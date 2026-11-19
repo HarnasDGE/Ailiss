@@ -42,7 +42,7 @@ const SIGNATURES: Array<{ id: string; family: Parameters<typeof phraseRule>[1]; 
     patterns: [
       /\bread that again\b/, /\blet that sink in\b/, /\bhere['’]?s the thing\b/, /\bplot twist:/, /\bthe result\?/,
       /\byour move\.?$/m, /\blet['’]?s go\.?\s*🚀/, /\bkeep going\. your moment is coming\b/, /\bif this is you\b/,
-      /\bi see you\.?\s*(?:\p{Extended_Pictographic}|$)/m,
+      /\bi see you\.?\s*(?:\p{Extended_Pictographic}|$)/mu,
       /\bstop \w+ing\. start \w+ing\b/, /\bprzeczytaj to (?:jeszcze raz|ponownie)\b/, /\bzatrzymaj się na chwilę\b/,
     ],
   },
@@ -59,7 +59,7 @@ const PROVERBS = [
 ].map((p) => re(p, 'iu'));
 
 const ABSTRACT_SUFFIX = /(?:ship|ity|ness|ing|ion|ment|ence|ance|ism|ość|anie|enie|cja|stwo)$/u;
-const TRIAD_RE = re(/\b([\p{L}-]+), ([\p{L}-]+),? (?:and|i|oraz) ([\p{L}-]+)\b/, 'giu');
+const TRIAD_RE = re(/\b([\p{L}-]+), ([\p{L}-]+),? (?:and|i|oraz) ([\p{L}-]+)\b/u, 'giu');
 
 export const CONSTRUCTION_RULES: SignalRule[] = [
   {

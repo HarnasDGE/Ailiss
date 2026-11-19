@@ -23,7 +23,7 @@
 │                                        └─ sendMessage ──────────┤      │
 └────────────────────────────────────────────────────────────────┼──────┘
 ┌──────────────────── service worker ────────────────────────────┼──────┐
-│ router ─► cache (IndexedDB) ─► queue (batch 5, limity) ─► openrouter  │
+│ router ─► cache (storage.local) ─► queue (batch 5, limity) ─► openrouter│
 │                                  circuit breaker ─► przy awarii: zostaje│
 │                                  wynik heurystyki                      │
 └───────────────────────────────────────────────────────────────────────┘
@@ -174,7 +174,6 @@ Mała ikona `⚑` w prawym górnym rogu karty, widoczna tylko na hover (opacity 
 | `⚑` na niezwiniętym poście (hover) → „Zgłoś jako slop” | `slop` |
 | Prawy klik na poście → menu kontekstowe „Ailiss: zgłoś jako slop” | `slop` |
 | „To nie slop” na zwiniętym poście | `human` |
-| Rozwinięcie posta 4–6 i potwierdzenie „Tak, slop” w belce | `slop` |
 | Zaznaczenie fragmentu → menu kontekstowe „Ailiss: dodaj frazę jako sygnał” | własna fraza (§6.4) |
 
 Po kliknięciu `⚑` — mini-formularz w popoverze (wszystko opcjonalne, domyślnie wystarczy jeden klik):
@@ -188,7 +187,7 @@ Po kliknięciu `⚑` — mini-formularz w popoverze (wszystko opcjonalne, domyś
 ```
 Po zgłoszeniu post od razu się zwija (`Ukryto · zgłoszone przez Ciebie`), z możliwością cofnięcia.
 
-### 6.2 Model danych (IndexedDB, wyłącznie lokalnie)
+### 6.2 Model danych (`chrome.storage.local`, wyłącznie lokalnie)
 ```ts
 interface UserReport {
   id: string;
@@ -216,86 +215,104 @@ Limit 500 zgłoszeń (najstarsze `slop` wypadają pierwsze; `human` trzymane dł
 5. **Kalibracja wag** — lokalna statystyka: które reguły trafiają w zgłoszenia `slop`, a które w `human`. Po ≥ 20 zgłoszeniach wagi reguł korygowane automatycznie w granicach ±50% wartości domyślnej; reset jednym przyciskiem.
 
 ### 6.4 Eksport / import
-- JSON zgodny z formatem fiksturek (`tests/fixtures/slop|human/`) — zgłoszenia można przenieść do testów i stroić domyślne reguły na prawdziwych postach.
+- JSON zgodny z formatem fiksturek (`tests/fixtures/posts/*.json`, tablica `posts`) — zgłoszenia można przenieść do testów i stroić domyślne reguły na prawdziwych postach.
 - Import cudzego zestawu (np. od znajomego) z deduplikacją po `textHash`.
 
 ## 7. Struktura projektu
 
-Stack: TypeScript + Manifest V3 + [WXT](https://wxt.dev). Testy: Vitest.
+Stack: TypeScript + Manifest V3 + [WXT](https://wxt.dev). Testy: Vitest (+ happy-dom), smoke test: Playwright.
 
 ```
 ailiss/
 ├─ docs/
 │  ├─ DESIGN.md
-│  └─ research/ai-slop-linkedin.md
+│  └─ research/ai-slop-linkedin.md      # raport — źródło reguł i fiksturek
+├─ public/icon/                         # ikony (npm run icons)
+├─ scripts/
+│  ├─ generate-icons.mjs
+│  └─ e2e-smoke.mjs                     # Chromium + rozszerzenie + makieta feedu
 ├─ src/
 │  ├─ entrypoints/
-│  │  ├─ background.ts               # service worker
-│  │  ├─ linkedin.content.ts         # content script
-│  │  ├─ popup/
-│  │  └─ options/
+│  │  ├─ background.ts                  # service worker
+│  │  ├─ linkedin.content.ts            # content script
+│  │  ├─ popup/                         # index.html, main.ts, style.css
+│  │  └─ options/                       # index.html, main.ts, style.css
 │  ├─ background/
-│  │  ├─ router.ts
-│  │  ├─ cache.ts                    # IndexedDB, TTL
-│  │  ├─ context-menu.ts             # „zgłoś jako slop”, „dodaj frazę”
-│  │  ├─ reports/
-│  │  │  ├─ reports-store.ts         # IndexedDB: UserReport, UserPhrase
-│  │  │  ├─ select-examples.ts       # dobór few-shot do batcha
-│  │  │  ├─ calibrate-weights.ts     # korekta wag reguł ±50%
-│  │  │  └─ export-import.ts
-│  │  ├─ queue.ts                    # batching, limity
+│  │  ├─ router.ts                      # obsługa wiadomości
+│  │  ├─ llm-service.ts                 # cache → limity → bezpiecznik → kolejka → OpenRouter
+│  │  ├─ cache.ts                       # oceny LLM, TTL 7 dni, max 1000
+│  │  ├─ queue.ts                       # batching (5 postów / 400 ms), max 2 równolegle
 │  │  ├─ circuit-breaker.ts
-│  │  └─ openrouter/
-│  │     ├─ client.ts
-│  │     ├─ prompt.ts                # stałe z shared/slop + przykłady ze zgłoszeń
-│  │     └─ response-schema.ts
+│  │  ├─ stats.ts
+│  │  ├─ context-menu.ts                # „zgłoś jako slop”, „dodaj frazę”
+│  │  ├─ openrouter/
+│  │  │  ├─ client.ts                   # chat/completions, models, key
+│  │  │  ├─ prompt.ts                   # stałe z shared/slop + few-shot ze zgłoszeń
+│  │  │  ├─ response-schema.ts          # JSON schema + parsowanie (LLM i decyzyjny)
+│  │  │  └─ classify.ts
+│  │  └─ reports/
+│  │     ├─ reports-store.ts            # zgłoszenia, frazy, autorzy (zapisy serializowane)
+│  │     ├─ select-examples.ts          # dobór few-shot
+│  │     ├─ calibrate-weights.ts        # korekta wag reguł ±50%
+│  │     └─ export-import.ts
 │  ├─ content/
+│  │  ├─ content-store.ts               # ustawienia + kontekst użytkownika ze storage
+│  │  ├─ post-controller.ts             # cykl życia posta/komentarza
+│  │  ├─ decide.ts                      # progi, łączenie wyników, priorytety
 │  │  ├─ linkedin/
-│  │  │  ├─ selectors.ts             # selektory z fallbackami, data-urn
+│  │  │  ├─ selectors.ts                # selektory z fallbackami, data-urn
+│  │  │  ├─ extract-text.ts             # tekst z <br>, bez „…więcej” i visually-hidden
 │  │  │  ├─ extract-post.ts
 │  │  │  ├─ extract-comment.ts
 │  │  │  └─ feed-observer.ts
-│  │  ├─ decide.ts                   # progi, łączenie wyników
 │  │  └─ ui/
-│  │     ├─ collapse-bar.ts          # Shadow DOM
+│  │     ├─ page-style.ts               # jedyny CSS wstrzykiwany do strony
+│  │     ├─ theme.ts                    # tokeny, jasny/ciemny motyw, Shadow DOM
+│  │     ├─ collapse-bar.ts
 │  │     ├─ peek-popover.ts
-│  │     ├─ report-button.ts         # ⚑ na hover + mini-formularz
-│  │     └─ collapse.css
+│  │     └─ report-button.ts            # ⚑ + mini-formularz
+│  ├─ options/                          # sekcje strony ustawień
+│  ├─ ui/base.css                       # wspólny styl popupu i ustawień
 │  └─ shared/
-│     ├─ messages.ts
-│     ├─ settings.ts
+│     ├─ messages.ts                    # typowane wiadomości SW <-> UI
+│     ├─ settings.ts                    # ustawienia, progi
+│     ├─ storage.ts                     # klucze i odczyt chrome.storage.local
 │     ├─ types.ts
-│     └─ slop/                       # cała wiedza z raportu
-│        ├─ families.ts              # 14 rodzin + opisy (UI i prompt)
-│        ├─ test-items.ts            # 12 pytań testu (UI i prompt)
-│        ├─ parse-post.ts            # ParsedPost: akapity, zdania, encje
-│        ├─ score.ts                 # silnik heurystyki
-│        ├─ similarity.ts            # MinHash 3-gramów, Jaccard
+│     ├─ dom.ts
+│     └─ slop/                          # cała wiedza z raportu
+│        ├─ families.ts                 # 14 rodzin (UI i prompt)
+│        ├─ test-items.ts               # 12 pytań testu (UI i prompt)
+│        ├─ parse-post.ts               # ParsedPost: akapity, zdania, encje
+│        ├─ regex.ts                    # unicode'owa granica słowa (\b nie działa z „ł”, „ę”)
+│        ├─ score.ts                    # silnik heurystyki + reguły użytkownika
+│        ├─ similarity.ts               # MinHash 3-gramów, Jaccard, textHash
+│        ├─ comment.ts                  # komentarz-slop
 │        └─ rules/
-│           ├─ openers.ts            # §5.1 + PL
-│           ├─ closers.ts            # §5.2 + PL
-│           ├─ vocabulary.ts         # §5.3, §5.5
-│           ├─ constructions.ts      # §5.4 (antyteza, rule of three…)
-│           ├─ structure.ts          # §6 (broetry, rytm, emoji, hashtagi)
-│           ├─ substance.ts          # antysygnały (konkret)
-│           └─ user.ts               # własne frazy, kopie, autor (ze zgłoszeń)
-├─ tests/
-│  ├─ fixtures/
-│  │  ├─ slop/                       # wszystkie przykłady z raportu §4
-│  │  ├─ human/                      # wersje „po” z §8 + dobry komentarz §9
-│  │  └─ dom/                        # snapshoty HTML feedu LinkedIn
-│  ├─ score.test.ts
-│  ├─ similarity.test.ts
-│  ├─ select-examples.test.ts
-│  └─ extract-post.test.ts
-├─ wxt.config.ts
-└─ package.json
+│           ├─ structure.ts             # §6 (hook, broetry, listy, emoji, hashtagi, rytm)
+│           ├─ family-phrases.ts        # otwarcia i frazy rodzin (§4, §5.1, §5.5)
+│           ├─ closers.ts               # §5.2 + PL
+│           ├─ vocabulary.ts            # §5.3, §5.5
+│           ├─ constructions.ts         # §5.4 (antyteza, anafora, przysłowia, triady)
+│           └─ substance.ts             # antysygnały (konkret)
+└─ tests/
+   ├─ fixtures/
+   │  ├─ posts/report-examples.json     # wszystkie przykłady z raportu (§4, §8, §9)
+   │  ├─ posts/extra-human.json         # dodatkowe ludzkie posty (kontrola fałszywych pozytywów)
+   │  └─ dom/feed.html                  # makieta feedu LinkedIn
+   └─ *.test.ts                         # score, comment, similarity, extract-post, decide, background
 ```
 
-### Kryteria akceptacji heurystyki (testy na fiksturach)
-- ≥ 90% przykładów z §4 ma wynik ≥ 7 (krótkie warianty typu „Unpopular opinion: … I said what I said.” mogą lądować w 4–6).
-- 100% wersji „po” z §8 ma wynik < 4 (żadnego fałszywego zwinięcia).
-- Każdy przykład z §4 dostaje poprawną rodzinę.
+### Odstępstwa od pierwotnego projektu
+- **`chrome.storage.local` zamiast IndexedDB** — content script nie ma dostępu do IndexedDB rozszerzenia, a storage.local czyta bezpośrednio i dostaje zdarzenia `onChanged`. Zapisy danych użytkownika robi tylko service worker; klucz API leży pod osobnym kluczem, którego content script nie czyta.
+- **Skala heurystyki**: surowe punkty × 1,5 (heurystyka widzi 9 z 12 pytań). Klaster = ≥ 3 grupy sygnałów **albo** ≥ 2 grupy + brak konkretu + ≥ 4 sygnały; bez klastra wynik ≤ 6.
+- **LLM** odpowiada na 11 pytań (bez #12), wynik przeskalowany do 0–12.
+- **Formularz zgłoszenia** renderowany w osobnym hoście w `<body>` (nie dziedziczy przezroczystości ikony, nie jest ucinany przez kartę).
+
+### Kryteria akceptacji heurystyki (testy na fiksturach) — spełnione
+- ≥ 90% pełnych przykładów z §4 ma wynik ≥ 7 (jest 21/22; wyjątek: 3-linijkowy „Unpopular opinion … I said what I said.” = 5).
+- Skrócone warianty (§8 „przed”, wariant §4.5) — co najmniej strefa niepewna (≥ 4).
+- 100% wersji „po” z §8 i dodatkowych ludzkich postów ma wynik < 4 (najwyższy: 2).
+- Każdy przykład z §4 dostaje poprawną rodzinę (dla 2 przykładów, które raport sam łączy — antyteza w „AI won’t replace you” — dopuszczona rodzina alternatywna).
 
 ## 8. Manifest (szkic)
 - `permissions`: `storage`, `contextMenus`
