@@ -1,207 +1,248 @@
 # Ailiss — projekt wtyczki Chrome ukrywającej AI slop na LinkedIn
 
+Źródło wiedzy o wzorcach: [`docs/research/ai-slop-linkedin.md`](research/ai-slop-linkedin.md) (dalej: *raport*).
+
 ## 1. Cel i zasady
 
-- Wykrywa posty w feedzie LinkedIn, które wyglądają na generowany „AI slop”, i **zwija** je do cienkiego, mało widocznego paska z możliwością podglądu/rozwinięcia.
-- Klasyfikacja **lokalnie** przez wbudowany w Chrome model (Prompt API / Gemini Nano).
-- Fallback: **OpenRouter** (model LLM lub tani model „decyzyjny”), a na końcu **heurystyka** bez modelu.
-- Nic nie jest usuwane z DOM — tylko ukrywane klasą CSS (LinkedIn to React + wirtualizacja listy; usuwanie węzłów psuje feed).
-- Wywołania API wyłącznie z service workera (nigdy z content scriptu), klucz API nie trafia do kontekstu strony.
+- Wykrywa posty w feedzie LinkedIn, które są „AI slopem”, i **zwija** je do cienkiego, mało widocznego paska z podglądem i rozwinięciem.
+- Dwa silniki:
+  1. **Heurystyka** (domyślna, lokalna, darmowa, natychmiastowa) — implementacja testu 0–12 i banków sygnatur z raportu.
+  2. **OpenRouter** (opcjonalny) — LLM lub tani model „decyzyjny”, wołany tylko dla przypadków niepewnych (albo dla wszystkich, jeśli użytkownik tak ustawi).
+- Wbudowany LLM przeglądarki (Gemini Nano) — **pominięty**. Interfejs providera zostaje, więc można go dodać później.
+- **Zasada klastra** (raport §1): pojedynczy em-dash, lista czy emoji nigdy nie zwijają posta. Wymagane są sygnały z kilku kategorii naraz **i** brak konkretu.
+- Nic nie jest usuwane z DOM — tylko ukrywane atrybutem + CSS (LinkedIn to React + wirtualizowana lista).
+- Wywołania API wyłącznie z service workera; klucz nie trafia do kontekstu strony.
 
 ## 2. Architektura
 
 ```
-┌──────────────── linkedin.com (content script) ────────────────┐
-│ observer ─► extract ─► heurystyka (natychmiast) ─► UI (zwiń)  │
-│     │                                   ▲                      │
-│     └── chrome.runtime.sendMessage ─────┼──────────────────────┘
-│                                         │ wynik
-┌─────────────── service worker (background) ───────────────────┐
-│ router ─► cache ─► queue ─► pipeline ─► provider               │
-│                              │  1. chrome-ai (Gemini Nano)    │
-│                              │  2. openrouter (LLM/decyzyjny) │
-│                              │  3. heuristic (zawsze dostępny)│
-│                              └─ circuit breaker per provider  │
-└───────────────────────────────────────────────────────────────┘
-        offscreen document — host dla Prompt API, jeśli
-        `LanguageModel` nie jest dostępny w service workerze
+┌──────────────────── linkedin.com (content script) ────────────────────┐
+│ feed-observer ─► extract-post ─► heuristic.score() ─► decyzja ─► UI   │
+│                                        │ wynik niepewny (4–6)   ▲      │
+│                                        └─ sendMessage ──────────┤      │
+└────────────────────────────────────────────────────────────────┼──────┘
+┌──────────────────── service worker ────────────────────────────┼──────┐
+│ router ─► cache (IndexedDB) ─► queue (batch 5, limity) ─► openrouter  │
+│                                  circuit breaker ─► przy awarii: zostaje│
+│                                  wynik heurystyki                      │
+└───────────────────────────────────────────────────────────────────────┘
 ```
+
+Heurystyka działa bezpośrednio w content scripcie (czysty TS, bez sieci) — zero opóźnienia, brak migania feedu.
 
 ### Przepływ dla jednego posta
-1. `MutationObserver` wykrywa nowy post, `IntersectionObserver` zgłasza go dopiero, gdy jest ~1,5 ekranu od widoku (nie klasyfikujemy całego feedu na zapas).
-2. `extract` pobiera: URN posta, autora, pełny tekst (także ukryty za „…więcej”), typ (oryginalny / repost / sponsorowany), liczbę emoji/hashtagów.
-3. Heurystyka liczy wynik w <1 ms. Jeśli ≥ progu „pewnego slopu” (np. 90) — zwijamy od razu, bez migania.
-4. Wiadomość `CLASSIFY` do service workera → cache (klucz: URN + hash tekstu, TTL 7 dni) → kolejka → provider.
-5. Wynik końcowy: `final = 0.7 * llm + 0.3 * heurystyka` (gdy brak LLM: sama heurystyka). Zwinięcie, jeśli `final ≥ próg`.
+1. `MutationObserver` wykrywa nowy post; `IntersectionObserver` zgłasza go, gdy jest ~1,5 ekranu przed widokiem.
+2. `extract-post` pobiera: URN, autora, pełny tekst (także za „…więcej”), typ (oryginalny / repost / sponsorowany / z karuzelą PDF).
+3. `heuristic.score(text)` → wynik 0–12, rodzina slopu, lista sygnałów.
+4. Decyzja wg progów (§4.3). Strefa niepewna + włączony OpenRouter → `CLASSIFY` do SW → cache (URN + hash tekstu, TTL 7 dni) → kolejka → LLM.
+5. Zwinięcie lub pozostawienie posta; wynik zapisany w cache.
 
-## 3. Silniki klasyfikacji
+## 3. Heurystyka — mapowanie raportu na reguły
 
-### 3.1 Chrome Built-in AI (domyślny)
-- API: `LanguageModel.availability()` → `available | downloadable | downloading | unavailable`.
-- `downloadable`: na stronie ustawień przycisk „Pobierz model lokalny” (pobranie wymaga gestu użytkownika), postęp z `monitor` → `downloadprogress`.
-- Jedna sesja bazowa z promptem systemowym, dla każdego posta `session.clone()` — kontekst nie rośnie.
-- `session.prompt(tekst, { responseConstraint: JSON_SCHEMA })` — wymuszony JSON.
-- Współbieżność 1 (Nano jest ciężki), timeout 15 s.
-- **Ograniczenia**: wymagania sprzętowe (dysk, GPU/RAM), oficjalnie wspierane tylko wybrane języki wejścia (en/es/ja). Dla postów PL: próbujemy, ale jeśli `create()` z danym językiem rzuca błąd albo jakość jest słaba → routing do OpenRoutera lub heurystyki (ustawienie „język → silnik”).
+### 3.1 Test 0–12 (raport §7) — co da się wykryć automatycznie
 
-### 3.2 OpenRouter (fallback lub wybór ręczny)
-- `POST https://openrouter.ai/api/v1/chat/completions`, `Authorization: Bearer <key>`, z service workera (`host_permissions`).
-- Dwa tryby:
-  - **LLM** — zwraca JSON `{score, verdict, signals[], reason}`; `response_format: json_schema` tam, gdzie model wspiera, inaczej parsowanie + walidacja.
-  - **Decyzyjny** — tani/mały model, odpowiedź jednym tokenem `SLOP` / `OK` (`max_tokens: 3`, `temperature: 0`); jeśli model zwraca `logprobs` → z nich wynik 0–100. Taniej i szybciej, bez uzasadnienia.
-- **Batching**: do 5 postów w jednym żądaniu (tablica JSON) — mniej kosztów i żądań.
-- Lista modeli pobierana z `GET /api/v1/models` w ustawieniach (wybór z listy, z ceną).
-- Limit dzienny żądań/kosztu, po przekroczeniu → heurystyka.
-- Prywatność: wysyłamy tylko tekst posta (bez imion, linków, komentarzy), obcięty do ~1500 znaków. Klucz w `chrome.storage.local` (nie `sync`).
+| # | Pytanie z raportu | Heurystyka | LLM |
+|---|---|---|---|
+| 1 | Hook = jedno zdanie bez kontekstu i nazwy | 1. akapit = 1 zdanie, ≤ 15 słów, bez liczby/nazwy własnej, po nim pusta linia | ✔ |
+| 2 | Większość akapitów to jedno zdanie (broetry) | ≥ 60% akapitów ma 1 zdanie i akapitów ≥ 5 | ✔ |
+| 3 | Da się usunąć 30% bez utraty sensu | ✘ (przybliżenie: powtórzenia leksykalne hook ↔ re-hook) | ✔ |
+| 4 | `It's not X, it's Y` i warianty | regexy EN/PL z §5.4 | ✔ |
+| 5 | Lista 3/5 z bold-headerami lub emoji | linie zaczynające się od emoji/1️⃣/✅, wzorzec `**X:**`/`X:` w ≥ 3 liniach | ✔ |
+| 6 | Słownictwo AI | bank §5.3 + §5.5; ≥ 1 trafienie = punkt (≥ 3 = waga ×1,5) | ✔ |
+| 7 | Closér-bait | bank §5.2 + PL, sprawdzany w ostatnich 3 akapitach | ✔ |
+| 8 | Zero nazwisk, firm, dat, sprawdzalnych liczb | brak: nazw własnych w środku zdania, dat, kwot, %, liczb z jednostką | ✔ |
+| 9 | Każda porażka zamknięta sukcesem | wzorzec „porażka (lost/fired/rejected/straciłem) → sukces (today/3x/biggest)” | ✔ |
+| 10 | Pointa przenośna na inną branżę | ✘ | ✔ |
+| 11 | 4+ hashtagi lub emoji w każdej linii listy | licznik `#tag` ≥ 4, emoji na końcu ≥ 50% linii | ✔ |
+| 12 | Autor nie odpowiada w komentarzach | ✘ (niedostępne w feedzie) | ✘ |
 
-### 3.3 Heurystyka (zawsze aktywna)
-- Pre-filtr (natychmiastowe zwijanie oczywistych przypadków, oszczędność wywołań LLM) i ostatni fallback.
-- Reguły w `src/shared/signals/` (osobno `en.ts`, `pl.ts`) — **tu wchodzi research** o wyglądzie AI slopu.
-- Przykładowe sygnały (wagi do strojenia na fiksturach):
-  - „broetry” — większość linii to jedno zdanie, puste linie między nimi,
-  - hook w 1. linii + pusta linia, zakończenie pytaniem-zaczepką („Agree?”, „Co o tym myślicie? 👇”),
-  - emoji jako punktory (🚀 ✅ 👉 💡 🔥), ♻️ „Repost”, P.S.,
-  - konstrukcja „To nie jest X. To jest Y.” / „It's not X. It's Y.”,
-  - frazy: „In today's fast-paced world”, „game-changer”, „Let that sink in”, „delve”, „Here's the thing”, „W dzisiejszym dynamicznym świecie”, „Kluczem jest…”, „Oto 5 rzeczy, których…”,
-  - duża gęstość pauz „—”, listy po 3 elementy, „X lekcji, których nauczyło mnie…”,
-  - ściana hashtagów na końcu.
-- Wynik = suma wag znormalizowana do 0–100 + lista kodów sygnałów (pokazywana w podglądzie).
+Heurystyka pokrywa 9 z 12 pytań → wynik skalowany do 0–12: `score = round(punkty / 9 * 12)`.
 
-### 3.4 Wybór silnika i odporność
-- Kolejność konfigurowalna (domyślnie: Chrome AI → OpenRouter → heurystyka).
-- Circuit breaker: 3 błędy/timeouty z rzędu → provider wyłączony na 10 min, ruch idzie do następnego.
-- Health-check przy starcie i przy zmianie ustawień; status widoczny w popupie.
+### 3.2 Sygnały dodatkowe (raport §5.1, §6)
+- **Otwarcia** z §5.1 (humbled, unpopular opinion, 3 years ago I was, I wasn't going to post this…) — przypisują też **rodzinę**.
+- **Rytm**: niska wariancja długości zdań (odchylenie std < 3 słowa przy średniej 8–14).
+- **Kreski**: em-dash w > 40% zdań; curly quotes (niska waga — LinkedIn bywa normalizuje).
+- **Title Case** w linii-nagłówku.
+- **Sygnatury-podpisy**: `That's it. That's the post.`, `Simple. Not easy.`, `I said what I said`, `Read that again`.
+- **Mgliste atrybucje** (§4.12): `Studies show`, `Research suggests`, `Badania pokazują` bez nazwy źródła w tym samym zdaniu.
 
-## 4. Prompt (wspólny dla LLM)
+### 3.3 Antysygnały — „substancja” obniża wynik
+Zgodnie z definicją (slop = forma + **zero konkretu**):
+- konkretne liczby z jednostką/kontekstem, daty, nazwy narzędzi/firm, cytat źródła → −1 do −3,
+- nierówne akapity (min. jeden ≥ 4 zdania) → −1,
+- wątpliwość/niezamknięty wynik („jeszcze nie wiem”, „not sure yet”) → −1.
 
+Przykłady „po” z raportu §8 muszą wychodzić **< 4**.
+
+### 3.4 Rodziny (raport §4) — etykieta w UI
+Każda reguła ma przypisaną rodzinę; wygrywa ta z największą sumą wag:
+`announcement` (4.1) · `broetry` (4.2) · `antithesis` (4.3) · `fake-journey` (4.4) · `lessons-list` (4.5) · `hot-take` (4.6) · `engagement-bait` (4.7) · `ai-vocabulary` (4.8) · `fake-vulnerability` (4.9) · `ai-thought-leadership` (4.10) · `corporate-hr` (4.11) · `fake-data` (4.12) · `emoji-framework` (4.13) · `comment-slop` (4.14).
+
+### 3.5 Format reguł
+```ts
+interface SignalRule {
+  id: string;                    // 'closer.agree'
+  family: SlopFamily;
+  testItem?: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 | 11;  // pytanie z testu 0–12
+  lang: 'en' | 'pl' | 'any';
+  weight: number;                // ujemna = antysygnał
+  match: RegExp | ((post: ParsedPost) => boolean);
+}
 ```
-Jesteś klasyfikatorem postów z LinkedIn. Oceń, czy post to "AI slop":
-generyczna, masowo generowana treść bez własnego doświadczenia autora,
-z typowymi wzorcami (lista sygnałów z signals). Nie oceniasz tematu ani
-poglądów — tylko styl i autentyczność. Ludzki, konkretny post z
-emoji to NIE slop.
-Zwróć JSON: {"score":0-100,"verdict":"slop|human|uncertain",
-"signals":["broetry","hook",...],"reason":"max 12 słów"}
+`ParsedPost` liczony raz: akapity, zdania, liczba słów na zdanie, linie listy, emoji, hashtagi, encje (liczby, daty, nazwy własne).
+
+## 4. OpenRouter
+
+### 4.1 Wywołanie
+- `POST https://openrouter.ai/api/v1/chat/completions`, `Authorization: Bearer <key>`, z service workera.
+- Lista modeli z `GET /api/v1/models` w ustawieniach (wybór z listy z ceną).
+- Batching do 5 postów w jednym żądaniu; limit dzienny żądań; circuit breaker (3 błędy → przerwa 10 min, zostaje wynik heurystyki).
+- Prywatność: tylko tekst posta, bez imion autora/komentarzy, obcięty do ~1500 znaków. Klucz w `chrome.storage.local`.
+
+### 4.2 Tryby
+- **LLM (z uzasadnieniem)** — model odpowiada na 12 pytań testu (bez #12) → JSON:
+  ```json
+  {"answers":[1,1,0,1,0,1,1,1,0,1,0], "family":"broetry", "reason":"historia z dzieckiem → lekcja o przywództwie"}
+  ```
+  `score = suma answers`. Wymuszenie `response_format: json_schema` tam, gdzie model wspiera; inaczej walidacja + 1 ponowienie.
+- **Decyzyjny** — tani model, `temperature: 0`, `max_tokens: 3`, odpowiedź `SLOP` / `OK` (jeśli są `logprobs`, z nich prawdopodobieństwo). Taniej, bez etykiety rodziny (bierzemy ją z heurystyki).
+
+### 4.3 Prompt systemowy (skrót)
 ```
-Kody sygnałów są wspólne z heurystyką → spójny podgląd w UI.
+Klasyfikujesz posty LinkedIn. AI slop = jednocześnie: (1) przewidywalna
+forma (hook, broetry, lista, closér), (2) zero konkretu (nazwiska, liczby,
+daty, konsekwencje), (3) brak autora — post pasuje do każdego konta.
+Pojedynczy em-dash/emoji/lista NIE czyni posta slopem. Nie oceniasz tematu
+ani poglądów. Odpowiedz 0/1 na pytania: [11 pytań z testu]. Wskaż rodzinę
+z listy: [14 rodzin].
+```
+Treść pytań i rodzin generowana z tych samych stałych co heurystyka (`src/shared/slop/`), więc prompt i reguły się nie rozjeżdżają.
+
+### 4.4 Progi decyzji (skala raportu)
+
+| Wynik | Raport | Bez OpenRoutera | Z OpenRouterem |
+|---|---|---|---|
+| 0–3 | czysto | pokaż | pokaż |
+| 4–6 | podejrzane | zależnie od czułości | wyślij do LLM |
+| 7–9 | slop | zwiń | zwiń (LLM opcjonalnie) |
+| 10–12 | slop generowany | zwiń | zwiń |
+
+Czułość: **Łagodny** (zwijaj ≥ 8) · **Normalny** (≥ 7) · **Agresywny** (≥ 5). Wynik łączony, gdy LLM odpowiedział: `final = round(0.6 * llm + 0.4 * heur)`.
 
 ## 5. UI
 
-### 5.1 Zwinięty post (w feedzie)
-Pasek ~28 px, kolory tła LinkedIn, tekst w odcieniu szarości (niski kontrast, ale czytelny), bez ikon alarmowych:
+### 5.1 Zwinięty post
+Pasek ~28 px, tło jak karta LinkedIn, szary tekst, bez ikon alarmowych:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ ⌄  Ukryto · Jan Kowalski · prawd. AI (87%)          Pokaż  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ ⌄  Ukryto · Jan Kowalski · broetry · 8/12             Pokaż │
+└──────────────────────────────────────────────────────────────┘
 ```
-- **Hover** (lub klik w „⌄”): popover z pierwszymi ~2 liniami posta i powodami („broetry · hook · pytanie-zaczepka”).
-- **Pokaż**: rozwija post w miejscu; nad nim mała belka „Zwiń · To nie slop · Zawsze ukrywaj tego autora”.
-- „To nie slop” → zapis do listy wyjątków (URN posta + opcjonalnie autor) i do lokalnych statystyk do strojenia wag.
-- Implementacja: post dostaje `data-ailiss="collapsed"`, CSS ukrywa jego dzieci poza paskiem; pasek w **Shadow DOM** (izolacja od stylów LinkedIn). Wygląd dopasowany do motywu jasny/ciemny LinkedIn.
-- Tryby do wyboru: **zwiń** (domyślnie) / **przyciemnij** (opacity 0.35, rozjaśnia na hover) / **tylko oznacz** (mała etykieta).
+- **Hover / klik „⌄”** — popover: pierwsze 2 linie posta + trafione punkty testu („hook · broetry · closér · brak konkretu”).
+- **Pokaż** — rozwija w miejscu; nad postem belka: `Zwiń · To nie slop · Zawsze ukrywaj autora · Zawsze pokazuj autora`.
+- „To nie slop” → wyjątek dla posta + lokalna statystyka trafień reguł (do strojenia wag).
+- Pasek w **Shadow DOM**; post dostaje `data-ailiss="collapsed"`, CSS chowa jego zawartość poza paskiem. Wsparcie jasnego/ciemnego motywu LinkedIn.
+- Tryby: **zwiń** (domyślnie) · **przyciemnij** (opacity 0.35, pełna na hover) · **tylko oznacz** (mała etykieta).
 
-### 5.2 Popup (ikona rozszerzenia)
-- Przełącznik włącz/wyłącz, „Ukryto dziś: 23”.
-- Aktywny silnik + status (🟢 Gemini Nano lokalnie / 🟡 OpenRouter / ⚪ heurystyka).
-- Suwak czułości: Łagodny (próg 85) · Normalny (70) · Agresywny (55).
+### 5.2 Komentarze (rodzina 4.14, opcja)
+Komentarze typu „Great post! 💯 Couldn't agree more” lub reklama pod postem → zwinięcie do jednej linii `Ukryto komentarz · Pokaż`. Reguła: krótki tekst, zero odniesienia do treści posta (brak wspólnych słów kluczowych), fraza z banku lub CTA „DM me”.
 
-### 5.3 Strona ustawień
-- Silniki: kolejność, status Chrome AI, przycisk pobrania modelu, test połączenia.
-- OpenRouter: klucz, model z listy, tryb LLM/decyzyjny, limit dzienny.
-- Zachowanie: tryb ukrywania, czy pomijać posty sponsorowane / reposty / posty osób z sieci 1. stopnia.
-- Wyjątki: lista autorów zawsze pokazywanych / zawsze ukrywanych.
-- Prywatność: wyczyść cache, eksport/import ustawień (bez klucza).
+### 5.3 Popup
+- Włącz/wyłącz, „Ukryto dziś: 23” (+ podział na rodziny).
+- Status silnika: 🟢 heurystyka · 🟢/🔴 OpenRouter (z liczbą żądań dziś / limit).
+- Czułość: Łagodny · Normalny · Agresywny.
+
+### 5.4 Ustawienia
+- OpenRouter: klucz, test połączenia, model, tryb LLM/decyzyjny, zakres (tylko niepewne / wszystkie), limit dzienny.
+- Zachowanie: tryb ukrywania, komentarze tak/nie, pomijanie postów sponsorowanych / repostów / 1. stopnia sieci.
+- Rodziny: możliwość wyłączenia wybranych (np. ktoś nie chce chować `announcement`).
+- Wyjątki autorów, czyszczenie cache, eksport/import ustawień (bez klucza).
 
 ## 6. Struktura projektu
 
-Stack: TypeScript + Manifest V3 + [WXT](https://wxt.dev) (build, HMR, generowanie manifestu). Alternatywa: Vite + `@crxjs/vite-plugin`.
+Stack: TypeScript + Manifest V3 + [WXT](https://wxt.dev). Testy: Vitest.
 
 ```
 ailiss/
 ├─ docs/
-│  └─ DESIGN.md
+│  ├─ DESIGN.md
+│  └─ research/ai-slop-linkedin.md
 ├─ src/
 │  ├─ entrypoints/
-│  │  ├─ background.ts              # service worker: rejestracja routera
-│  │  ├─ linkedin.content.ts        # content script dla *.linkedin.com/feed*
-│  │  ├─ offscreen/                 # host Prompt API (gdy brak w SW)
+│  │  ├─ background.ts               # service worker
+│  │  ├─ linkedin.content.ts         # content script
 │  │  ├─ popup/
 │  │  └─ options/
 │  ├─ background/
-│  │  ├─ router.ts                  # obsługa wiadomości
-│  │  ├─ cache.ts                   # IndexedDB, TTL
-│  │  ├─ queue.ts                   # współbieżność, batching, limity
+│  │  ├─ router.ts
+│  │  ├─ cache.ts                    # IndexedDB, TTL
+│  │  ├─ queue.ts                    # batching, limity
 │  │  ├─ circuit-breaker.ts
-│  │  └─ classifier/
-│  │     ├─ pipeline.ts             # wybór providera, łączenie wyników
-│  │     ├─ prompt.ts
-│  │     ├─ schema.ts               # JSON schema odpowiedzi + walidacja
-│  │     └─ providers/
-│  │        ├─ provider.types.ts    # interfejs ClassifierProvider
-│  │        ├─ chrome-ai.provider.ts
-│  │        ├─ openrouter.provider.ts
-│  │        └─ heuristic.provider.ts
+│  │  └─ openrouter/
+│  │     ├─ client.ts
+│  │     ├─ prompt.ts                # budowany ze stałych z shared/slop
+│  │     └─ response-schema.ts
 │  ├─ content/
 │  │  ├─ linkedin/
-│  │  │  ├─ selectors.ts            # selektory z fallbackami (LinkedIn często zmienia klasy)
+│  │  │  ├─ selectors.ts             # selektory z fallbackami, data-urn
 │  │  │  ├─ extract-post.ts
+│  │  │  ├─ extract-comment.ts
 │  │  │  └─ feed-observer.ts
+│  │  ├─ decide.ts                   # progi, łączenie wyników
 │  │  └─ ui/
-│  │     ├─ collapse-bar.ts         # Shadow DOM
+│  │     ├─ collapse-bar.ts          # Shadow DOM
 │  │     ├─ peek-popover.ts
 │  │     └─ collapse.css
 │  └─ shared/
-│     ├─ messages.ts                # typy wiadomości SW <-> content
-│     ├─ settings.ts                # schemat + domyślne ustawienia, storage
-│     ├─ types.ts                   # Post, ClassificationResult
-│     └─ signals/
-│        ├─ index.ts                # kody sygnałów + wagi
-│        ├─ en.ts
-│        └─ pl.ts
+│     ├─ messages.ts
+│     ├─ settings.ts
+│     ├─ types.ts
+│     └─ slop/                       # cała wiedza z raportu
+│        ├─ families.ts              # 14 rodzin + opisy (UI i prompt)
+│        ├─ test-items.ts            # 12 pytań testu (UI i prompt)
+│        ├─ parse-post.ts            # ParsedPost: akapity, zdania, encje
+│        ├─ score.ts                 # silnik heurystyki
+│        └─ rules/
+│           ├─ openers.ts            # §5.1 + PL
+│           ├─ closers.ts            # §5.2 + PL
+│           ├─ vocabulary.ts         # §5.3, §5.5
+│           ├─ constructions.ts      # §5.4 (antyteza, rule of three…)
+│           ├─ structure.ts          # §6 (broetry, rytm, emoji, hashtagi)
+│           └─ substance.ts          # antysygnały (konkret)
 ├─ tests/
-│  ├─ fixtures/posts/               # przykładowe posty: slop / human (z researchu)
-│  ├─ heuristic.test.ts
-│  └─ extract-post.test.ts          # na zapisanych snapshotach DOM LinkedIn
+│  ├─ fixtures/
+│  │  ├─ slop/                       # wszystkie przykłady z raportu §4
+│  │  ├─ human/                      # wersje „po” z §8 + dobry komentarz §9
+│  │  └─ dom/                        # snapshoty HTML feedu LinkedIn
+│  ├─ score.test.ts
+│  └─ extract-post.test.ts
 ├─ wxt.config.ts
 └─ package.json
 ```
 
-### Kluczowe typy
-```ts
-interface ClassifierProvider {
-  id: 'chrome-ai' | 'openrouter' | 'heuristic';
-  isAvailable(): Promise<boolean>;
-  classify(posts: PostInput[]): Promise<ClassificationResult[]>;
-}
-
-interface ClassificationResult {
-  urn: string;
-  score: number;            // 0–100
-  verdict: 'slop' | 'human' | 'uncertain';
-  signals: SignalCode[];
-  reason?: string;
-  provider: ClassifierProvider['id'];
-}
-```
+### Kryteria akceptacji heurystyki (testy na fiksturach)
+- ≥ 90% przykładów z §4 ma wynik ≥ 7 (krótkie warianty typu „Unpopular opinion: … I said what I said.” mogą lądować w 4–6).
+- 100% wersji „po” z §8 ma wynik < 4 (żadnego fałszywego zwinięcia).
+- Każdy przykład z §4 dostaje poprawną rodzinę.
 
 ## 7. Manifest (szkic)
-- `permissions`: `storage`, `offscreen`
-- `host_permissions`: `https://www.linkedin.com/*`, `https://openrouter.ai/*`
-- content script: `https://www.linkedin.com/*` (SPA — observer działa na całej domenie, aktywny tylko na feedzie/profilach)
+- `permissions`: `storage`
+- `host_permissions`: `https://www.linkedin.com/*`, `https://openrouter.ai/*` (to drugie jako `optional_host_permissions`, prośba dopiero po włączeniu OpenRoutera)
 - brak `<all_urls>`, brak zdalnego kodu.
 
 ## 8. Ryzyka
+
 | Ryzyko | Mitygacja |
 |---|---|
-| LinkedIn zmienia DOM | selektory z fallbackami w jednym pliku, testy na snapshotach, atrybuty `data-urn` zamiast klas |
-| Gemini Nano słabo radzi sobie z PL / niedostępny sprzętowo | routing wg języka, fallback OpenRouter/heurystyka |
-| Fałszywe pozytywy | domyślnie „zwiń”, nie „usuń”; „To nie slop”; wyjątki dla autorów; strojenie wag na fiksturach |
-| Koszt OpenRouter | heurystyka jako pre-filtr, cache, batching, limit dzienny, tryb decyzyjny |
-| Miganie feedu | natychmiastowa heurystyka dla oczywistych przypadków, LLM tylko doprecyzowuje |
+| Fałszywe pozytywy (ludzki post w stylu broetry) | zasada klastra, antysygnały konkretu, domyślnie „zwiń” a nie „usuń”, „To nie slop”, wyłączanie rodzin |
+| Slop bez fraz z banku (model omija słowa kluczowe) | reguły strukturalne (rytm, akapity, brak encji) + LLM dla strefy 4–6 |
+| LinkedIn zmienia DOM | selektory w jednym pliku, `data-urn`, testy na snapshotach |
+| Koszt OpenRouter | tylko strefa niepewna, cache, batching, limit, tryb decyzyjny |
+| Wykrywanie nazw własnych w PL/EN bez NLP | proste reguły (wielka litera w środku zdania, liczby, daty) — wystarczą jako antysygnał, nie muszą być dokładne |
 
 ## 9. Etapy
-1. **MVP**: content script + ekstrakcja + heurystyka + zwijanie + popup.
-2. Chrome AI provider + strona ustawień + pobieranie modelu.
-3. OpenRouter (LLM + decyzyjny), batching, limity, circuit breaker.
-4. Feedback „To nie slop”, wyjątki autorów, strojenie wag na fiksturach z researchu.
+1. **MVP**: `shared/slop` (parser + reguły + score) z testami na fiksturach z raportu → content script + zwijanie + popup.
+2. Popover z powodami, „To nie slop”, wyjątki autorów, wyłączanie rodzin.
+3. OpenRouter (LLM + decyzyjny), cache, batching, limity, circuit breaker.
+4. Komentarze (rodzina 4.14).
