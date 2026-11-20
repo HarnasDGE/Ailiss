@@ -29,7 +29,7 @@ const handlers: Handlers = {
   UPDATE_PHRASE: async ({ id, weight }) => (await updatePhrase(id, weight), ok),
   DELETE_PHRASE: async ({ id }) => (await deletePhrase(id), ok),
   SET_AUTHOR_RULE: async ({ authorId, rule }) => (await setAuthorRule(authorId, rule), ok),
-  COUNT_HIDDEN: async ({ family }) => (await countHidden(family), ok),
+  COUNT_HIDDEN: async ({ family, ad }) => (await countHidden(family, ad), ok),
   GET_STATUS: () => engineStatus(),
   LIST_MODELS: async () => {
     try {

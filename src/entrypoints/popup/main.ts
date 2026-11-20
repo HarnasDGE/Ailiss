@@ -76,6 +76,7 @@ function render(settings: Settings, status: EngineStatus): void {
     el('header', {}, [el('h1', { text: 'Ailiss' }), el('label', { className: 'switch' }, [toggle, settings.enabled ? 'Włączony' : 'Wyłączony'])]),
     el('div', {}, [
       el('div', { className: 'stat' }, [el('strong', { text: String(status.stats.hidden) }), el('span', { className: 'muted', text: 'ukrytych postów dziś' })]),
+      ...(status.stats.ads ? [el('div', { className: 'muted small', text: `+ ${status.stats.ads} reklam` })] : []),
       el('div', { className: 'families' }, families),
     ]),
     el('section', {}, [

@@ -16,12 +16,22 @@ import { ReportButton, type ReportForm } from './ui/report-button';
 
 /** Posty krótsze niż tyle znaków (zdjęcie, wideo, „Congrats!”) pomijamy. */
 const MIN_TEXT_LENGTH = 40;
+/** Jak często najwyżej przeliczać post bez tekstu przy zmianach w jego DOM. */
+const NO_TEXT_REFRESH_MS = 120;
 
 function stateFor(hide: boolean, mode: HideMode, expanded: boolean, forceCollapsed: boolean): BarState {
   if (!hide) return 'none';
   if (expanded) return 'expanded';
   if (forceCollapsed) return 'collapsed';
   return mode === 'collapse' ? 'collapsed' : mode === 'dim' ? 'dimmed' : 'labeled';
+}
+
+export interface EvaluateOptions {
+  /**
+   * Zmiana wywołana przez użytkownika (ustawienia, zgłoszenie, lista autorów) — wolno zwinąć post,
+   * który już był widoczny. Automatyczne, spóźnione decyzje (LLM, doładowany tekst) tylko go oznaczają.
+   */
+  explicit?: boolean;
 }
 
 function preview(text: string): string {
@@ -47,12 +57,16 @@ export class PostController {
   private counted = false;
   private localReport?: { id?: string; label: ReportLabel };
   private decision?: Decision;
+  private rendered: BarState = 'none';
+  private textLength = -1;
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly bar: CollapseBar;
   private readonly flag: ReportButton;
 
   constructor(
     readonly el: HTMLElement,
     private readonly getState: () => ContentState,
+    private readonly isSeen: (el: Element) => boolean = () => false,
   ) {
     this.bar = new CollapseBar(el, {
       onShow: () => this.setExpanded(true),
@@ -72,12 +86,37 @@ export class PostController {
     });
   }
 
-  evaluate(): void {
+  /**
+   * Wołane przy każdej zmianie DOM wewnątrz posta. Tania ścieżka: jeśli tekst się nie zmienił
+   * (np. tylko pasek wideo albo licznik reakcji), nic nie robimy.
+   */
+  refresh(): void {
+    const textEl = this.post?.textEl;
+    if (textEl?.isConnected) {
+      if ((textEl.textContent?.length ?? 0) !== this.textLength) this.evaluate();
+      return;
+    }
+    // Brak tekstu (jeszcze się nie doładował albo post to samo wideo) — debounce, żeby zmiany
+    // w odtwarzaczu (licznik czasu) nie wyzwalały ekstrakcji kilka razy na sekundę.
+    if (this.refreshTimer) return;
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      if (this.el.isConnected) this.evaluate();
+    }, NO_TEXT_REFRESH_MS);
+  }
+
+  evaluate(options: EvaluateOptions = {}): void {
     const state = this.getState();
     if (!state.settings.enabled) return this.clearUi();
 
     const post = extractPost(this.el);
-    if (post.text.length < MIN_TEXT_LENGTH) return this.clearUi();
+    this.textLength = post.textEl?.textContent?.length ?? 0;
+    // Reklamę ukrywamy niezależnie od tekstu (bywa samo zdjęcie/wideo).
+    const isAd = state.settings.hideSponsored && post.isSponsored;
+    if (post.text.length < MIN_TEXT_LENGTH && !isAd) {
+      this.post = post;
+      return this.clearUi();
+    }
     const hash = textHash(post.text);
     if (hash !== this.hash) {
       this.hash = hash;
@@ -105,10 +144,10 @@ export class PostController {
     if (this.decision.askLlm) void this.askLlm(post.text, this.heuristic);
     if (this.decision.hide && !this.counted) {
       this.counted = true;
-      void quiet(send('COUNT_HIDDEN', { family: this.decision.family }));
+      void quiet(send('COUNT_HIDDEN', { family: this.decision.family, ad: this.decision.source === 'sponsored' }));
     }
     if (!this.decision.hide) this.forceCollapsed = false;
-    this.render(state.settings.hideMode);
+    this.render(state.settings.hideMode, options.explicit ?? false);
   }
 
   destroy(): void {
@@ -122,15 +161,26 @@ export class PostController {
   }
 
   private clearUi(): void {
+    this.rendered = 'none';
     this.bar.destroy();
     this.flag.destroy();
   }
 
-  private render(mode: HideMode): void {
+  private render(mode: HideMode, explicit: boolean): void {
     const d = this.decision;
     const h = this.heuristic;
     if (!d || !h || !this.post) return;
-    const state = stateFor(d.hide, mode, this.expanded, this.forceCollapsed);
+    let state = stateFor(d.hide, mode, this.expanded, this.forceCollapsed);
+    // Post już przeczytany i dotąd widoczny → nie zwijamy go „pod oczami”, tylko oznaczamy.
+    const hiding = state === 'collapsed' || state === 'dimmed';
+    if (hiding && !explicit && !this.forceCollapsed && this.rendered === 'none' && this.isSeen(this.el)) state = 'labeled';
+    // Raz oznaczony (zamiast zwinięty) post zostaje oznaczony przy kolejnych automatycznych ocenach.
+    if (hiding && !explicit && !this.forceCollapsed && this.rendered === 'labeled') state = 'labeled';
+    if (state === this.rendered && state === 'none') {
+      this.flag.mount();
+      return;
+    }
+    this.rendered = state;
     this.bar.render(state, this.barInfo(d, h));
     if (state === 'none') this.flag.mount();
     else this.flag.destroy();
@@ -157,7 +207,7 @@ export class PostController {
 
   private setExpanded(expanded: boolean): void {
     this.expanded = expanded;
-    this.render(this.getState().settings.hideMode);
+    this.render(this.getState().settings.hideMode, true);
   }
 
   private async askLlm(text: string, heuristic: ScoreResult): Promise<void> {
@@ -176,7 +226,7 @@ export class PostController {
     this.localReport = { label };
     this.expanded = false;
     this.forceCollapsed = false;
-    this.evaluate();
+    this.evaluate({ explicit: true });
     const response = await quiet(
       send('REPORT_POST', {
         report: {
@@ -202,7 +252,7 @@ export class PostController {
     this.localReport = undefined;
     this.counted = true;
     if (id) await quiet(send('DELETE_REPORT', { id }));
-    this.evaluate();
+    this.evaluate({ explicit: true });
   }
 
   private async setAuthorRule(rule: 'alwaysHide' | 'alwaysShow'): Promise<void> {
@@ -229,6 +279,10 @@ export class CommentController {
       onAlwaysHideAuthor: () => undefined,
       onAlwaysShowAuthor: () => undefined,
     });
+  }
+
+  refresh(): void {
+    this.evaluate();
   }
 
   evaluate(): void {

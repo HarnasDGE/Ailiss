@@ -1,16 +1,16 @@
-import { re } from '../regex';
-import { countWordsIn } from '../parse-post';
+import { countWordsIn, type ParsedPost } from '../parse-post';
+import { anyHit, combine, distinctHits, re } from '../regex';
 import { LIFE_SCENE_OPENERS } from './family-phrases';
 import { phraseRule, type SignalRule } from './types';
 
-const LIFE_SCENE = LIFE_SCENE_OPENERS.map((p) => re(p, 'imu'));
+const LIFE_SCENE = combine(LIFE_SCENE_OPENERS);
 const BUSINESS_PIVOT = re(
   /\b(?:leadership|leader|sales|business|customer experience|customers?|teams?|strategy|marketing|hiring|recruit\w*|culture|career|management|przywództw\w*|lider\w*|sprzedaż\w*|biznes\w*|klient\w*|zesp\w*|strategi\w*|rekrutac\w*|kultur\w* organizac\w*|karier\w*)\b/,
   'iu',
 );
 
 /** „It's not X, it's Y” i warianty (raport §4.3, §5.4). `\s+` łapie też przejście przez pustą linię. */
-const ANTITHESIS = [
+const ANTITHESIS = combine([
   /\b(?:it['’]?s|it is|this is|that['’]?s)\s+not\s+(?:just\s+)?(?:about\s+)?[^.!?\n]{1,50}[.,;—–]\s*(?:it['’]?s|it is|but)\s+/,
   /\b\w+\s+(?:isn['’]?t|is not|aren['’]?t|are not|won['’]?t be|don['’]?t)\s+(?:about\s+|a\s+|an\s+|just\s+|built on\s+)?[^.!?\n]{1,40}[.!]\s+(?:it['’]?s|they['’]?re|it is|they are|it['’]?ll be|they['’]?ll be)\s+/,
   /\byou don['’]?t have an? [^.!?\n]{1,30} problem[.,]?\s+you have an? /,
@@ -22,13 +22,26 @@ const ANTITHESIS = [
   /\b(?:to )?nie tylko [^.!?\n]{1,40}\s*[—–,]\s*(?:chodzi o|to|ale)\b/,
   /\b\w+ (?:isn['’]?t|is not) an? [^.!?\n]{1,30} problem\b/,
   /\b(?:won['’]?t|will not) [^.!?\n]{1,30}[.!]\s+but\s+[^.!?\n]{1,30} will\b/,
-].map((p) => re(p, 'imu'));
+]);
 
-const ANTITHESIS_GLOBAL = ANTITHESIS.map((r) => new RegExp(r.source, `${r.flags}g`));
-
-function antithesisCount(text: string): number {
-  return ANTITHESIS_GLOBAL.reduce((n, r) => n + (text.match(r)?.length ?? 0), 0);
+const antithesisCache = new WeakMap<ParsedPost, number>();
+function antithesisCount(post: ParsedPost): number {
+  let n = antithesisCache.get(post);
+  if (n === undefined) {
+    n = post.text.match(ANTITHESIS)?.length ?? 0;
+    antithesisCache.set(post, n);
+  }
+  return n;
 }
+
+const FAILURE = re(
+  /\b(?:lost|fired|rejected|rejections?|failed|broke|panicked|cried|couch|\$0|questioned everything|straciłem|straciłam|zwolni\w*|odrzu\w*|porażk\w*|płakałem|płakałam|bez grosza)\b/,
+  'iu',
+);
+const SUCCESS = re(
+  /\b(?:today|yesterday i signed|biggest|\dx bigger|\dx\b|\d-figure|is back|we['’]?re \dx|grew|dziś|dzisiaj|wczoraj podpisałem|największ\w*)\b/,
+  'iu',
+);
 
 /** Sygnatury-podpisy (raport §5.1, §5.2). */
 const SIGNATURES: Array<{ id: string; family: Parameters<typeof phraseRule>[1]; patterns: RegExp[] }> = [
@@ -49,14 +62,14 @@ const SIGNATURES: Array<{ id: string; family: Parameters<typeof phraseRule>[1]; 
 ];
 
 /** Przysłowia-wypełniacze typowe dla list lekcji (raport §4.5). */
-const PROVERBS = [
+const PROVERBS = combine([
   /\bconsistency (?:beats|wins|is key)\b/, /\byour network is your net worth\b/, /\bdone (?:is better than|>) perfect\b/,
   /\bfeedback is a gift\b/, /\bnever stop learning\b/, /\bshow up every day\b/, /\bwork smarter,? not harder\b/,
   /\bculture eats strategy\b/, /\bpeople don['’]?t leave (?:companies|jobs)\b/, /\bbe present\b/, /\btrust the process\b/,
   /\bprogress over perfection\b/, /\bfail fast\b/, /\bthe best teams aren['’]?t\b/,
   /\bkonsekwencja (?:wygrywa|jest kluczem|bije talent)\b/, /\bfeedback to (?:prezent|dar)\b/,
   /\bnigdy nie przestawaj się uczyć\b/, /\bzrobione jest lepsze niż idealne\b/, /\btwoja sieć (?:kontaktów )?to twój kapitał\b/,
-].map((p) => re(p, 'iu'));
+], 'iu');
 
 const ABSTRACT_SUFFIX = /(?:ship|ity|ness|ing|ion|ment|ence|ance|ism|ość|anie|enie|cja|stwo)$/u;
 const TRIAD_RE = re(/\b([\p{L}-]+), ([\p{L}-]+),? (?:and|i|oraz) ([\p{L}-]+)\b/u, 'giu');
@@ -70,7 +83,7 @@ export const CONSTRUCTION_RULES: SignalRule[] = [
     weight: 1,
     familyWeight: 2,
     match: (post) => {
-      if (!LIFE_SCENE.some((r) => r.test(post.head))) return 0;
+      if (!anyHit(post.head, LIFE_SCENE)) return 0;
       const rest = post.units.slice(2).join('\n');
       return BUSINESS_PIVOT.test(rest) ? 1 : 0;
     },
@@ -100,7 +113,7 @@ export const CONSTRUCTION_RULES: SignalRule[] = [
     weight: 1,
     familyWeight: 1.5,
     match: (post) => {
-      const hits = PROVERBS.reduce((n, r) => n + (r.test(post.lower) ? 1 : 0), 0);
+      const hits = distinctHits(post.lower, PROVERBS);
       return hits >= 2 ? 1 : hits === 1 ? 0.5 : 0;
     },
   },
@@ -126,7 +139,7 @@ export const CONSTRUCTION_RULES: SignalRule[] = [
     testItem: 4,
     weight: 1,
     familyWeight: 1.5,
-    match: (post) => (antithesisCount(post.text) > 0 ? 1 : 0),
+    match: (post) => (antithesisCount(post) > 0 ? 1 : 0),
   },
   {
     id: 'construction.antithesis-repeat',
@@ -134,7 +147,7 @@ export const CONSTRUCTION_RULES: SignalRule[] = [
     group: 'construction',
     weight: 1,
     familyWeight: 2,
-    match: (post) => (antithesisCount(post.text) >= 2 ? 1 : 0),
+    match: (post) => (antithesisCount(post) >= 2 ? 1 : 0),
   },
   {
     // „Mindset. / Discipline. / Consistency.” — 3+ kolejne jednostki po 1–2 słowa.
@@ -161,17 +174,9 @@ export const CONSTRUCTION_RULES: SignalRule[] = [
     weight: 1,
     familyWeight: 1,
     match: (post) => {
-      const failure = re(
-        /\b(?:lost|fired|rejected|rejections?|failed|broke|panicked|cried|couch|\$0|questioned everything|straciłem|straciłam|zwolni\w*|odrzu\w*|porażk\w*|płakałem|płakałam|bez grosza)\b/,
-        'iu',
-      ).exec(post.lower);
+      const failure = FAILURE.exec(post.lower);
       if (!failure) return 0;
-      const after = post.lower.slice(failure.index);
-      const success = re(
-        /\b(?:today|yesterday i signed|biggest|\dx bigger|\dx\b|\d-figure|is back|we['’]?re \dx|grew|dziś|dzisiaj|wczoraj podpisałem|największ\w*)\b/,
-        'iu',
-      ).test(after);
-      return success ? 1 : 0;
+      return SUCCESS.test(post.lower.slice(failure.index)) ? 1 : 0;
     },
   },
   ...SIGNATURES.map(({ id, family, patterns }) =>

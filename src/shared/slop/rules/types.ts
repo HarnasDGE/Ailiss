@@ -1,6 +1,6 @@
 import type { SlopFamily } from '../families';
 import type { ParsedPost } from '../parse-post';
-import { re } from '../regex';
+import { anyHit, combine, distinctHits } from '../regex';
 import type { TestItemId } from '../test-items';
 
 /**
@@ -51,7 +51,7 @@ export function phraseRule(
   patterns: (string | RegExp)[],
   options: PhraseRuleOptions = {},
 ): SignalRule {
-  const compiled = patterns.map((p) => re(p, 'imu'));
+  const compiled = combine(patterns);
   const scope = options.scope ?? 'text';
   return {
     id,
@@ -62,12 +62,13 @@ export function phraseRule(
     familyWeight: options.familyWeight,
     match: (post) => {
       const haystack = scope === 'head' ? post.head : scope === 'tail' ? post.tail : post.lower;
-      return compiled.some((r) => r.test(haystack)) ? 1 : 0;
+      return anyHit(haystack, compiled) ? 1 : 0;
     },
   };
 }
 
 /** Liczba różnych wzorców z listy, które trafiły. */
-export function countPatternHits(text: string, patterns: RegExp[]): number {
-  return patterns.reduce((n, r) => n + (r.test(text) ? 1 : 0), 0);
+/** Liczba różnych wzorców (z `combine()`), które trafiły. */
+export function countPatternHits(text: string, combined: RegExp): number {
+  return distinctHits(text, combined);
 }

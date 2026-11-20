@@ -48,7 +48,7 @@ export interface RequestMap {
   UPDATE_PHRASE: { req: { id: string; weight: number }; res: { ok: true } };
   DELETE_PHRASE: { req: { id: string }; res: { ok: true } };
   SET_AUTHOR_RULE: { req: { authorId: string; rule: AuthorRule }; res: { ok: true } };
-  COUNT_HIDDEN: { req: { family: SlopFamily }; res: { ok: true } };
+  COUNT_HIDDEN: { req: { family: SlopFamily; ad?: boolean }; res: { ok: true } };
   GET_STATUS: { req: Record<string, never>; res: EngineStatus };
   LIST_MODELS: { req: Record<string, never>; res: { models: OpenRouterModel[]; error?: string } };
   TEST_OPENROUTER: { req: Record<string, never>; res: { ok: boolean; error?: string; sample?: string } };

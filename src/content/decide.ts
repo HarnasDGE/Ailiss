@@ -37,6 +37,7 @@ export function decide(input: DecisionInput): Decision {
   if (input.reported === 'slop') return { ...base, hide: true, score: Math.max(heuristic.score, 12), source: 'user' };
   if (input.authors.alwaysShow.includes(input.authorId)) return { ...base, hide: false, score: heuristic.score, source: 'author' };
   if (input.authors.alwaysHide.includes(input.authorId)) return { ...base, hide: true, score: heuristic.score, source: 'author' };
+  if (settings.hideSponsored && input.isSponsored) return { ...base, hide: true, score: heuristic.score, source: 'sponsored' };
   if ((settings.skipSponsored && input.isSponsored) || (settings.skipReposts && input.isRepost)) {
     return { ...base, hide: false, score: heuristic.score, source: 'heuristic' };
   }

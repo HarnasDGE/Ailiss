@@ -52,7 +52,8 @@ describe('decyzja', () => {
 
   it('wyłączona rodzina i pomijane typy postów', () => {
     expect(decide(input(10, {}, { disabledFamilies: ['broetry'] })).hide).toBe(false);
-    expect(decide(input(10, { isSponsored: true }, { skipSponsored: true })).hide).toBe(false);
+    expect(decide(input(10, { isSponsored: true }, { skipSponsored: true, hideSponsored: false })).hide).toBe(false);
+    expect(decide(input(0, { isSponsored: true })).source).toBe('sponsored');
     expect(decide(input(10, { isRepost: true }, { skipReposts: true })).hide).toBe(false);
   });
 });

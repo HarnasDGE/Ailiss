@@ -1,8 +1,8 @@
-import { re } from '../regex';
+import { combine, re } from '../regex';
 import { countPatternHits, type SignalRule } from './types';
 
 /** Closéry pisane pod algorytm (raport §4.7, §5.2, §5.5) — szukane w ostatnich akapitach. */
-const TAIL_CLOSERS = [
+const TAIL_CLOSERS = combine([
   /\b(?:agree|thoughts|who['’]?s with me|am i wrong|right)\s*\?/,
   /\bwhich (?:one )?resonates\b/,
   /\bwhat (?:would|do) you add\b|\bwhat['’]?s the one thing you['’]?d add\b/,
@@ -15,10 +15,10 @@ const TAIL_CLOSERS = [
   /\bjoin us!?\s*(?:\p{Extended_Pictographic}|$)/mu,
   /\bdołącz(?:cie)? do nas\b/,
   /\bjesteś gotowy\s*\?|\bjesteście gotowi\s*\?/,
-].map((p) => re(p, 'imu'));
+]);
 
 /** Closéry, które są baitem niezależnie od miejsca w poście. */
-const ANYWHERE_CLOSERS = [
+const ANYWHERE_CLOSERS = combine([
   /\bcomment\s+["“”]?[a-z]{2,}["“”]?\s+(?:below|in the comments)\b/,
   /\bdrop an? (?:["“][^"”]+["”]|\p{Extended_Pictographic}|\w+) (?:below|in the comments)?/u,
   /\brepost (?:if|to help)\b/,
@@ -33,7 +33,7 @@ const ANYWHERE_CLOSERS = [
   /\bobserwuj (?:mnie )?(?:po więcej|aby nie przegapić|żeby nie przegapić)\b/,
   /\bzapisz (?:ten post|sobie)(?: na później)?\b/,
   /\boznacz (?:kogoś|osobę|znajomego)\b/,
-].map((p) => re(p, 'imu'));
+]);
 
 const PS_RE = re(/^p\.\s?(?:p\.\s?)?s\.?\s/, 'imu');
 

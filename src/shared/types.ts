@@ -63,7 +63,7 @@ export interface ScoreResult {
   matchedReport?: { id: string; label: ReportLabel; similarity: number };
 }
 
-export type EngineSource = 'heuristic' | 'openrouter' | 'user' | 'author';
+export type EngineSource = 'heuristic' | 'openrouter' | 'user' | 'author' | 'sponsored';
 
 export interface LlmVerdict {
   /** 0–12 (tryb LLM: suma odpowiedzi; tryb decyzyjny: 10 lub 1). */
@@ -84,5 +84,7 @@ export interface DailyStats {
   date: string;
   hidden: number;
   byFamily: Partial<Record<SlopFamily, number>>;
+  /** Ukryte posty promowane (reklamy). */
+  ads?: number;
   llmRequests: number;
 }

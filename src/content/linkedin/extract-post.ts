@@ -9,6 +9,8 @@ export interface ExtractedPost {
   authorId: string;
   isSponsored: boolean;
   isRepost: boolean;
+  /** Element z tekstem — do taniego sprawdzenia, czy treść się zmieniła (lazy-mount, „…więcej”). */
+  textEl: Element | null;
 }
 
 interface FoundText {
@@ -38,11 +40,14 @@ function ownText(el: Element, exclude: Element | null): string {
 }
 
 function findText(scope: Element, exclude: Element | null): FoundText {
+  // Pusty kontener tekstu (treść jeszcze się nie doładowała) też zapamiętujemy — po jego zmianie post jest przeliczany od razu.
+  let emptyEl: Element | null = null;
   for (const selector of SELECTORS.text) {
     for (const el of scope.querySelectorAll(selector)) {
       if (exclude && exclude !== scope && exclude.contains(el)) continue;
       const text = ownText(el, exclude === scope ? null : exclude);
       if (text) return { text, el };
+      emptyEl ??= el;
     }
   }
   // Fallback: najdłuższy blok tekstu w kierunku LTR/auto.
@@ -52,7 +57,7 @@ function findText(scope: Element, exclude: Element | null): FoundText {
     const text = textWithBreaks(el);
     if (text.length > best.text.length) best = { text, el };
   }
-  return best;
+  return best.text ? best : { text: '', el: emptyEl };
 }
 
 /**
@@ -80,7 +85,8 @@ function sduiAuthor(post: Element, textEl: Element | null): { authorId?: string;
 
 /** Tekst nagłówka posta (wszystko przed treścią) — do wykrycia „Promowane” / „udostępnił(a)”. */
 function headerText(post: Element, textEl: Element | null): string {
-  if (!textEl) return '';
+  // Reklama bez tekstu (samo zdjęcie/wideo) — bierzemy początek całej karty.
+  if (!textEl) return (post.textContent ?? '').slice(0, 1500);
   const range = document.createRange();
   range.setStart(post, 0);
   range.setEndBefore(textEl);
@@ -112,5 +118,6 @@ export function extractPost(el: HTMLElement): ExtractedPost {
     authorId: authorId ?? authorName,
     isSponsored: SPONSORED_RE.test(description?.textContent ?? head),
     isRepost: Boolean(inner) || REPOST_RE.test(header?.textContent ?? head),
+    textEl: found.el,
   };
 }

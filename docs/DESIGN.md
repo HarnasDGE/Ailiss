@@ -32,7 +32,10 @@
 Heurystyka działa bezpośrednio w content scripcie (czysty TS, bez sieci) — zero opóźnienia, brak migania feedu.
 
 ### Przepływ dla jednego posta
-1. `MutationObserver` wykrywa nowy post; `IntersectionObserver` zgłasza go, gdy jest ~1,5 ekranu przed widokiem.
+1. `MutationObserver` (content script od `document_start`) ocenia post w chwili wstawienia do DOM — w callbacku, czyli przed narysowaniem klatki. Zmiana w środku posta (doładowany tekst) → ponowna ocena, jeśli zmieniła się długość tekstu. Heurystyka kosztuje ~0,5 ms na post (wzorce każdej reguły połączone w jeden regex).
+   - `IntersectionObserver` nie steruje oceną (feed LinkedIn przewija się w kontenerze, gdzie `rootMargin` nie działa) — służy tylko do zapamiętania, które posty użytkownik już widział.
+   - Post już widziany nie jest zwijany automatycznie (spóźniona ocena LLM, doładowany tekst) — dostaje dyskretną etykietę. Zwijanie widzianego posta tylko na akcję użytkownika (zgłoszenie, zmiana ustawień, lista autorów).
+   - Posty „Promowane” są ukrywane niezależnie od oceny (opcja `hideSponsored`, domyślnie włączona).
 2. `extract-post` pobiera: URN, autora, pełny tekst (także za „…więcej”), typ (oryginalny / repost / sponsorowany / z karuzelą PDF).
 3. `heuristic.score(text)` → wynik 0–12, rodzina slopu, lista sygnałów.
 4. Decyzja wg progów (§4.3). Strefa niepewna + włączony OpenRouter → `CLASSIFY` do SW → cache (URN + hash tekstu, TTL 7 dni) → kolejka → LLM.

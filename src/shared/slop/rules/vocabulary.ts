@@ -1,8 +1,9 @@
-import { re } from '../regex';
+import type { ParsedPost } from '../parse-post';
+import { combine, distinctHits } from '../regex';
 import { phraseRule, type SignalRule } from './types';
 
 /** Słowa wprost wymienione w pytaniu 6 testu (raport §7) — jedno trafienie wystarcza. */
-const CORE_WORDS = [
+const CORE_WORDS = combine([
   /\bhumbled\b/,
   /\bthrilled\b/,
   /\bresonat(?:e|es|ed|ing)\b/,
@@ -10,10 +11,10 @@ const CORE_WORDS = [
   /\bgame[- ]?changer\b/,
   /\bdelv(?:e|es|ing)\b/,
   /\btapestry\b/,
-].map((p) => re(p, 'iu'));
+], 'iu');
 
 /** Bank słownictwa AI (raport §5.3 i §5.5). */
-const AI_WORDS = [
+const AI_WORDS = combine([
   // EN
   /\btestament\b/, /\bunderscor(?:e|es|ing)\b/, /\bshowcas(?:e|es|ing)\b/, /\bfoster(?:s|ing|ed)?\b/,
   /\bnavigat(?:e|es|ing)\b/, /\blandscape\b/, /\brealm\b/, /\bpivotal\b/, /\brobust\b/, /\bseamless(?:ly)?\b/,
@@ -28,10 +29,17 @@ const AI_WORDS = [
   /\bkluczow\w* moment\w*/, /\bogromn\w* potencja\w*/, /\bnawigowa\w*/, /\bmistern\w*/, /\bpielęgnuj\w*/,
   /\bekosystem\w*/, /\btransformacyjn\w*/, /\bprzełomow\w*/, /\brewolucyjn\w*/, /\bwartoś\w* dodan\w*/,
   /\bskrojon\w* na miarę\b/, /\bzłożonoś\w*/, /\bludzkiego potencjału\b/, /\bpotencjał\w* ludzk\w*/, /\bwyzwania i możliwości\b/, /\bkluczem (?:jest|do sukcesu)\b/,
-].map((p) => re(p, 'iu'));
+], 'iu');
 
-function distinctHits(text: string, patterns: RegExp[]): number {
-  return patterns.reduce((n, r) => n + (r.test(text) ? 1 : 0), 0);
+/** Liczone raz na post (obie reguły słownictwa korzystają z tych samych liczników). */
+const cache = new WeakMap<ParsedPost, { core: number; ai: number }>();
+function counts(post: ParsedPost): { core: number; ai: number } {
+  let c = cache.get(post);
+  if (!c) {
+    c = { core: distinctHits(post.lower, CORE_WORDS), ai: distinctHits(post.lower, AI_WORDS) };
+    cache.set(post, c);
+  }
+  return c;
 }
 
 export const VOCABULARY_RULES: SignalRule[] = [
@@ -43,8 +51,8 @@ export const VOCABULARY_RULES: SignalRule[] = [
     weight: 1,
     familyWeight: 0.6,
     match: (post) => {
-      if (distinctHits(post.lower, CORE_WORDS) > 0) return 1;
-      const hits = distinctHits(post.lower, AI_WORDS);
+      const { core, ai: hits } = counts(post);
+      if (core > 0) return 1;
       return hits >= 3 ? 1 : hits === 2 ? 0.75 : hits === 1 ? 0.5 : 0;
     },
   },
@@ -55,7 +63,8 @@ export const VOCABULARY_RULES: SignalRule[] = [
     weight: 1.25,
     familyWeight: 3,
     match: (post) => {
-      const hits = distinctHits(post.lower, AI_WORDS) + distinctHits(post.lower, CORE_WORDS);
+      const { core, ai } = counts(post);
+      const hits = core + ai;
       return hits >= 6 ? 1 : hits >= 4 ? 0.6 : 0;
     },
   },

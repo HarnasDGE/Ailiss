@@ -13,8 +13,12 @@ function update(mutate: (stats: Awaited<ReturnType<typeof getStats>>) => void): 
   return run;
 }
 
-export const countHidden = (family: SlopFamily) =>
+export const countHidden = (family: SlopFamily, ad = false) =>
   update((s) => {
+    if (ad) {
+      s.ads = (s.ads ?? 0) + 1;
+      return;
+    }
     s.hidden++;
     s.byFamily[family] = (s.byFamily[family] ?? 0) + 1;
   });

@@ -21,7 +21,18 @@ export function behaviorSection(settings: Settings, update: UpdateSettings): HTM
       (v) => update((s) => void (s.hideComments = v)),
       '„Great post! 💯 Couldn’t agree more” i reklamy pod cudzymi postami.',
     ),
-    checkbox('Nie ruszaj postów sponsorowanych', settings.skipSponsored, (v) => update((s) => void (s.skipSponsored = v))),
+    checkbox(
+      'Ukrywaj posty promowane (reklamy)',
+      settings.hideSponsored,
+      (v) => update((s) => void (s.hideSponsored = v)),
+      'Każdy post z oznaczeniem „Promowane” zwija się do paska, niezależnie od oceny slopu.',
+    ),
+    checkbox(
+      'Nie oceniaj reklam pod kątem slopu',
+      settings.skipSponsored,
+      (v) => update((s) => void (s.skipSponsored = v)),
+      'Działa, gdy ukrywanie reklam jest wyłączone.',
+    ),
     checkbox('Nie ruszaj repostów', settings.skipReposts, (v) => update((s) => void (s.skipReposts = v))),
   ]);
 }

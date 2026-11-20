@@ -38,6 +38,8 @@ export interface Settings {
   sensitivity: Sensitivity;
   hideMode: HideMode;
   hideComments: boolean;
+  /** Ukrywaj wszystkie posty promowane (reklamy), niezależnie od oceny slopu. */
+  hideSponsored: boolean;
   skipSponsored: boolean;
   skipReposts: boolean;
   disabledFamilies: SlopFamily[];
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 'normal',
   hideMode: 'collapse',
   hideComments: false,
+  hideSponsored: true,
   skipSponsored: false,
   skipReposts: false,
   disabledFamilies: [],

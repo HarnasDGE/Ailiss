@@ -130,7 +130,48 @@ try {
   );
   check('komentarz-slop zwinięty, merytoryczny nie', commentStates.join(',') === 'collapsed,none', commentStates.join(','));
 
-  // OpenRouter (zamockowany): post 1006 (5/12, strefa niepewna) → tryb decyzyjny „SLOP” → 0.6·10 + 0.4·5 = 8 → zwinięty.
+  // Natychmiastowość: post dodany do DOM jest oceniony w callbacku MutationObservera, przed narysowaniem klatki.
+  const slopText = await page.evaluate(() => document.querySelector('[data-urn="urn:li:activity:1003"] .update-components-text span[dir="ltr"]').innerHTML);
+  const template = await page.evaluate(() => document.querySelector('[data-urn="urn:li:activity:1002"]').outerHTML);
+  const makePost = (urn, html) =>
+    template
+      .replace('urn:li:activity:1002', `urn:li:activity:${urn}`)
+      .replace(/(<span dir="ltr">)[\s\S]*?(<\/span>)/, `$1${html}$2`);
+  const instant = await page.evaluate(async (html) => {
+    document.querySelector('main').insertAdjacentHTML('beforeend', html);
+    await Promise.resolve();
+    await Promise.resolve();
+    return document.querySelector('[data-urn="urn:li:activity:2001"]').getAttribute('data-ailiss-state');
+  }, makePost(2001, slopText));
+  check('nowy post-slop zwinięty jeszcze przed narysowaniem', instant === 'collapsed', String(instant));
+
+  // Tekst doładowany później (lazy-mount), post poza ekranem → zwinięty, gdy tylko pojawi się treść.
+  const lazy = await page.evaluate(async ({ html, text }) => {
+    document.querySelector('main').insertAdjacentHTML('beforeend', html);
+    await new Promise((r) => setTimeout(r, 300));
+    document.querySelector('[data-urn="urn:li:activity:2002"] span[dir="ltr"]').innerHTML = text;
+    await Promise.resolve();
+    await Promise.resolve();
+    return document.querySelector('[data-urn="urn:li:activity:2002"]').getAttribute('data-ailiss-state');
+  }, { html: makePost(2002, ''), text: slopText });
+  check('doładowany tekst poza ekranem → zwinięty od razu', lazy === 'collapsed', String(lazy));
+
+  // Post już widoczny na ekranie, któremu dopiero potem doładował się tekst-slop → tylko etykieta, bez zwijania.
+  const seenState = await page.evaluate(async ({ html, text }) => {
+    const main = document.querySelector('main');
+    main.insertAdjacentHTML('afterbegin', html);
+    window.scrollTo(0, 0);
+    await new Promise((r) => setTimeout(r, 600));
+    document.querySelector('[data-urn="urn:li:activity:2003"] span[dir="ltr"]').innerHTML = text;
+    await new Promise((r) => setTimeout(r, 50));
+    return document.querySelector('[data-urn="urn:li:activity:2003"]').getAttribute('data-ailiss-state');
+  }, { html: makePost(2003, ''), text: slopText });
+  check('widziany post nie znika — dostaje etykietę', seenState === 'labeled', String(seenState));
+
+  // OpenRouter (zamockowany): post 1006 (5/12, strefa niepewna) → tryb decyzyjny „SLOP” → 0.6·10 + 0.4·5 = 8.
+  // Post był już widoczny, więc spóźniona ocena LLM tylko go oznacza.
+  await target.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(400);
   let llmBody;
   await context.route('https://openrouter.ai/**', async (route) => {
     llmBody = route.request().postDataJSON();
@@ -150,7 +191,7 @@ try {
     });
   });
   await page.waitForTimeout(1500);
-  check('OpenRouter: niepewny post zwinięty po ocenie LLM', (await state(1006)) === 'collapsed');
+  check('OpenRouter: widziany niepewny post oznaczony po ocenie LLM', (await state(1006)) === 'labeled');
   const llmBar = await target.locator('.ailiss-host .summary').innerText().catch(() => '');
   check('pasek pokazuje źródło LLM', llmBar.includes('LLM'), llmBar);
   check('do modelu nie trafia imię autora', Boolean(llmBody) && !JSON.stringify(llmBody).includes('Karol Mazur'));
@@ -180,9 +221,11 @@ try {
   await sdui.waitForTimeout(800);
   const cards = sdui.locator('[role="listitem"][componentkey*="FeedType_"]');
   const sduiStates = await cards.evaluateAll((els) => els.map((e) => e.getAttribute('data-ailiss-state') ?? 'none'));
-  check('SDUI: post z konkretem widoczny, slop zwinięty', sduiStates.join(',') === 'none,collapsed', sduiStates.join(','));
+  check('SDUI: post z konkretem widoczny, slop i reklama zwinięte', sduiStates.join(',') === 'none,collapsed,collapsed', sduiStates.join(','));
   const sduiBar = await cards.nth(1).locator('.ailiss-host .summary').innerText().catch(() => '');
-  check('SDUI: pasek z autorem i rodziną', sduiBar.includes('Coach Produktywności') && sduiBar.includes('emoji-framework'), sduiBar);
+  check('SDUI: pasek reklamy', sduiBar.includes('Coach Produktywności') && sduiBar.includes('post promowany'), sduiBar);
+  const adBar = await cards.nth(2).locator('.ailiss-host .summary').innerText().catch(() => '');
+  check('SDUI: reklama z wideo ukryta jako „post promowany”', adBar.includes('Integrator Automatyki · post promowany'), adBar);
   const sduiHeight = await cards.nth(1).evaluate((el) => el.getBoundingClientRect().height);
   check('SDUI: zwinięta karta jest niska', sduiHeight <= 48, `${Math.round(sduiHeight)} px`);
   await cards.nth(0).hover();

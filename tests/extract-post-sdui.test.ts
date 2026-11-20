@@ -2,7 +2,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { decide } from '../src/content/decide';
 import { extractPost } from '../src/content/linkedin/extract-post';
+import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { findPosts } from '../src/content/linkedin/feed-observer';
 import { scorePost } from '../src/shared/slop/score';
 import { REPORT_FIXTURES } from './fixtures/load';
@@ -16,7 +18,7 @@ const posts = () => findPosts(document);
 
 describe('nowy feed LinkedIn (SDUI, zaciemnione klasy)', () => {
   it('znajduje karty postów po role=listitem + componentkey', () => {
-    expect(posts()).toHaveLength(2);
+    expect(posts()).toHaveLength(3);
     expect(posts()[0]!.getAttribute('role')).toBe('listitem');
   });
 
@@ -47,5 +49,23 @@ describe('nowy feed LinkedIn (SDUI, zaciemnione klasy)', () => {
     expect(p.authorName).toBe('Coach Produktywności');
     expect(p.isSponsored).toBe(true);
     expect(scorePost(p.text).score).toBeGreaterThanOrEqual(7);
+  });
+
+  it('reklama „Promowane” z wideo: wykryta i ukryta niezależnie od wyniku slopu', () => {
+    const p = extractPost(posts()[2]!);
+    expect(p.isSponsored).toBe(true);
+    expect(p.authorId).toBe('/in/integrator-automatyki');
+    expect(p.text.startsWith('🔊Dzień odbiorów')).toBe(true);
+    expect(p.text).toContain('#AutomatykaPrzemysłowa #Odbiory #Produkcja');
+    expect(p.text).not.toMatch(/Video Player|Play Video/);
+    const heuristic = scorePost(p.text);
+    const authors = { alwaysHide: [], alwaysShow: [], boosted: [] };
+    const base = { heuristic, authorId: p.authorId, authors, isSponsored: p.isSponsored };
+    expect(decide({ ...base, settings: DEFAULT_SETTINGS })).toMatchObject({ hide: true, source: 'sponsored' });
+    expect(decide({ ...base, settings: { ...DEFAULT_SETTINGS, hideSponsored: false } }).source).not.toBe('sponsored');
+  });
+
+  it('zwykłe posty nie są brane za reklamę', () => {
+    expect(extractPost(posts()[0]!).isSponsored).toBe(false);
   });
 });

@@ -46,6 +46,7 @@ function sourceText(info: BarInfo): string {
   if (info.isComment) return info.familyLabel;
   if (info.source === 'user') return 'zgłoszone przez Ciebie';
   if (info.source === 'author') return 'autor na liście ukrytych';
+  if (info.source === 'sponsored') return 'post promowany';
   return `${info.familyLabel} · ${info.score}/12${info.source === 'openrouter' ? ' · LLM' : ''}`;
 }
 
