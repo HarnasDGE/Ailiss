@@ -1,9 +1,12 @@
 /**
  * Selektory DOM LinkedIn — w jednym miejscu, z fallbackami (LinkedIn często zmienia klasy).
- * Priorytet: atrybuty `data-urn` / `data-id`, potem klasy.
+ * Dwa formaty feedu:
+ * - nowy (SDUI, 2026): zaciemnione klasy, stabilne są tylko `role`, `componentkey` i `data-testid`;
+ * - starszy: `data-urn` / `data-id` i klasy `.update-components-*`.
  */
 export const SELECTORS = {
   post: [
+    'div[role="listitem"][componentkey*="FeedType_"]',
     'div[data-urn^="urn:li:activity:"]',
     'div[data-urn^="urn:li:aggregate:"]',
     'div[data-id^="urn:li:activity:"]',
@@ -11,6 +14,7 @@ export const SELECTORS = {
     'div.feed-shared-update-v2',
   ],
   text: [
+    '[data-testid="expandable-text-box"]',
     '.update-components-text',
     '.feed-shared-inline-show-more-text',
     '.feed-shared-update-v2__description',
@@ -41,6 +45,9 @@ export const SELECTORS = {
   ],
   commentAuthor: ['.comments-comment-meta__description-title', '.comments-post-meta__name-text', '.comments-comment-item__post-meta'],
 } as const;
+
+/** Linki do profili (autor w nowym formacie = ostatni taki link przed tekstem posta). */
+export const PROFILE_LINK_SELECTOR = 'a[href*="/in/"], a[href*="/company/"], a[href*="/school/"], a[href*="/showcase/"]';
 
 export const POST_SELECTOR = SELECTORS.post.join(',');
 export const COMMENT_SELECTOR = SELECTORS.comment.join(',');

@@ -40,5 +40,6 @@ Zgłoszenia wyeksportowane ze strony ustawień (**Eksportuj JSON**) mają format
 
 ## Ograniczenia
 
-- Selektory DOM LinkedIn (`src/content/linkedin/selectors.ts`) zweryfikowano na makiecie, nie na żywym LinkedIn — LinkedIn często zmienia klasy. Selektory opierają się na `data-urn` i mają fallbacki, ale po zmianach LinkedIn mogą wymagać aktualizacji.
+- Obsługiwane są dwa formaty feedu LinkedIn: nowy (SDUI, zaciemnione klasy — kotwice: `role="listitem"` + `componentkey`, `data-testid="expandable-text-box"`, linki `/in/…`) i starszy (`data-urn`, `.update-components-*`). Nowy format zweryfikowano na zanonimizowanej próbce prawdziwego posta (`tests/fixtures/dom/feed-sdui.html`). Selektory są w `src/content/linkedin/selectors.ts`.
+- **Komentarze** w nowym formacie nie są jeszcze obsługiwane (brak próbki DOM) — przełącznik „Zwijaj komentarze-slop” działa tylko na starszym DOM.
 - Heurystyka nie sprawdza 3 pytań z testu (wata, przenośna pointa, brak odpowiedzi autora) — dwa pierwsze ocenia LLM.

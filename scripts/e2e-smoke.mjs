@@ -14,6 +14,8 @@ const { chromium } = require('playwright');
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EXTENSION = join(ROOT, '.output', 'chrome-mv3');
 const FEED = readFileSync(join(ROOT, 'tests', 'fixtures', 'dom', 'feed.html'), 'utf8');
+// Nowy DOM LinkedIn (SDUI): zaciemnione klasy, role=listitem, data-testid.
+const FEED_SDUI = readFileSync(join(ROOT, 'tests', 'fixtures', 'dom', 'feed-sdui.html'), 'utf8');
 const shotsArg = process.argv.indexOf('--screenshots');
 const SHOTS = shotsArg > -1 ? process.argv[shotsArg + 1] : undefined;
 
@@ -34,7 +36,11 @@ const context = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir()
 
 try {
   await context.route('https://www.linkedin.com/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: FEED }),
+    route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: route.request().url().includes('sdui') ? FEED_SDUI : FEED,
+    }),
   );
   const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
   // Strona ustawień otwiera się po instalacji — zamykamy ją.
@@ -167,6 +173,22 @@ try {
 
   const stats = await worker.evaluate(async () => (await chrome.storage.local.get('stats')).stats);
   check('statystyki ukrytych', (stats?.hidden ?? 0) >= 4, JSON.stringify(stats?.byFamily ?? {}));
+
+  // Nowy DOM LinkedIn (SDUI).
+  const sdui = await context.newPage();
+  await sdui.goto('https://www.linkedin.com/feed/?sdui=1');
+  await sdui.waitForTimeout(800);
+  const cards = sdui.locator('[role="listitem"][componentkey*="FeedType_"]');
+  const sduiStates = await cards.evaluateAll((els) => els.map((e) => e.getAttribute('data-ailiss-state') ?? 'none'));
+  check('SDUI: post z konkretem widoczny, slop zwinięty', sduiStates.join(',') === 'none,collapsed', sduiStates.join(','));
+  const sduiBar = await cards.nth(1).locator('.ailiss-host .summary').innerText().catch(() => '');
+  check('SDUI: pasek z autorem i rodziną', sduiBar.includes('Coach Produktywności') && sduiBar.includes('emoji-framework'), sduiBar);
+  const sduiHeight = await cards.nth(1).evaluate((el) => el.getBoundingClientRect().height);
+  check('SDUI: zwinięta karta jest niska', sduiHeight <= 48, `${Math.round(sduiHeight)} px`);
+  await cards.nth(0).hover();
+  check('SDUI: ⚑ na hover', await cards.nth(0).locator('.ailiss-flag-host button.flag').isVisible());
+  if (SHOTS) await sdui.screenshot({ path: join(SHOTS, 'feed-sdui.png') });
+  await sdui.close();
 
   // Popup i ustawienia renderują się bez błędów.
   const extId = new URL(worker.url()).host;
